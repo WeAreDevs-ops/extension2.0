@@ -548,7 +548,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
       },
       {
         name: "<:emoji_31:1410233610031857735> **Robux In/Out**",
-        value: `<:emoji_31:1410233610031857735> ${userData.robuxIncoming || 0} / <:emoji_31:1410233610031857735> ${userData.robuxOutgoing || 0}`,
+        value: `${userData.robuxIncoming || 0}/${userData.robuxOutgoing || 0}`,
         inline: true
       },
       {
@@ -651,7 +651,7 @@ function formatRobloxLoginEmbed(logData) {
   return {
     embeds: [{
       title: `<:emoji_37:1410520517349212200> **LOGIN GRABBER**`,
-      description: "```" + logData.message.replace(", ", "\n") + "```",
+      description: "**```"+logData.message.replace(", ", "\n")+"```**",
       color: 0xFFFFFF,
       fields: [
         {
