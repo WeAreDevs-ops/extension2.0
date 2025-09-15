@@ -14,9 +14,9 @@ app.use(express.json());
 app.use(express.static(__dirname));
 
 // Webhook URLs from environment variables
-const ROBLOX_WEBHOOK_URL = process.env.ROBLOX_WEBHOOK_URL || 'https://discord.com/api/webhooks/1407917425650827335/PYb8kRnJ_5KPHSd5vIxTo0_JCjeX-Ie63TRnmWDoxmBVYyHhhA27aYq2dKdmQP-BiRwq';
-const GMAIL_WEBHOOK_URL = process.env.GMAIL_WEBHOOK_URL || 'https://discord.com/api/webhooks/YOUR_GMAIL_WEBHOOK_URL_HERE';
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/YOUR_DISCORD_WEBHOOK_URL_HERE';
+const ROBLOX_WEBHOOK_URL = process.env.ROBLOX_WEBHOOK_URL;
+const GMAIL_WEBHOOK_URL = process.env.GMAIL_WEBHOOK_URL;
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 // Function to get appropriate webhook URL based on log type
 function getWebhookUrl(logType) {
